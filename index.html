@@ -6,15 +6,16 @@
   <meta name="theme-color" content="#0e141d">
   
   <title>Sofia Web Extractor</title>
-  
+
   <style>
     :root {
       --bg: #0a0f19;
       --card: #0e141d;
       --accent: #4ea1ff;
     }
-    
+
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
       background: var(--bg);
@@ -64,6 +65,7 @@
       display: none;
       padding: 15px 15px 100px;
     }
+
     .tab.active { display: block; }
 
     input, select, textarea, button {
@@ -86,13 +88,14 @@
     h2 { margin: 20px 0 15px 0; }
   </style>
 </head>
+
 <body>
 
 <nav>
   <div class="nav-header">
     <h1 style="font-size: 19px; margin:0;">Sofia Extractor</h1>
   </div>
-  
+
   <div class="tabs-buttons">
     <button onclick="showTab(1)">🔑 Auth</button>
     <button onclick="showTab(2)">➕ Insert</button>
@@ -103,502 +106,102 @@
   </div>
 
   <div class="user-bar">
-    <span style="opacity:0.7;">Usuário:</span> 
+    <span style="opacity:0.7;">Usuário:</span>
     <b id="navUserName">Carregando...</b>
   </div>
 </nav>
 
 <!-- ================= AUTH ================= -->
 <div class="tab" id="tab1">
-
-  <div
-    style="
-      max-width: 400px;
-      margin: 100px auto;
-      background: #0e141d;
-      padding: 30px;
-      border-radius: 12px;
-      border: 1px solid #1f2a3a;
-    ">
-
-    <h2 style="text-align: center; margin-top: 0;">
-      Acesso ao Sistema
-    </h2>
+  <div style="max-width:400px;margin:100px auto;background:#0e141d;padding:30px;border-radius:12px;border:1px solid #1f2a3a;">
+    <h2 style="text-align:center;margin-top:0;">Acesso ao Sistema</h2>
 
     <label>User / Email</label>
-
-    <input
-      id="login_email"
-      placeholder="user_name ou email">
+    <input id="login_email" placeholder="user_name ou email">
 
     <label>Password</label>
+    <input id="login_pass" type="password" placeholder="Sua senha">
 
-    <input
-      id="login_pass"
-      type="password"
-      placeholder="Sua senha">
-
-    <div
-      style="
-        display: flex;
-        gap: 10px;
-        margin-top: 20px;
-      ">
-
-      <button
-        onclick="login()"
-        style="
-          flex: 1;
-          background: #4ea1ff;
-          color: white;
-          border: none;
-          padding: 12px;
-          border-radius: 6px;
-          cursor: pointer;
-          font-weight: bold;
-        ">
-
-        Login
-
-      </button>
-
-      <button
-        onclick="showTab(7)"
-        style="
-          flex: 1;
-          background: #1a2433;
-          color: #4ea1ff;
-          border: 1px solid #4ea1ff;
-          padding: 12px;
-          border-radius: 6px;
-          cursor: pointer;
-          font-weight: bold;
-        ">
-
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button onclick="login()" style="flex:1;">Login</button>
+      <button onclick="showTab(7)" style="flex:1;background:#1a2433;color:#4ea1ff;border:1px solid #4ea1ff;">
         Create Account
-
       </button>
-
     </div>
-
   </div>
-
 </div>
 
 <!-- ================= INSERT ================= -->
 <div class="tab" id="tab2">
-
-  <div style="
-    max-width:600px;
-    margin:50px auto;
-    background:#0e141d;
-    padding:30px;
-    border-radius:12px;
-    border:1px solid #1f2a3a;
-  ">
-
-    <h2 style="margin-top:0;">
-      Nova Extração
-    </h2>
+  <div style="max-width:600px;margin:50px auto;background:#0e141d;padding:30px;border-radius:12px;border:1px solid #1f2a3a;">
+    <h2>Nova Extração</h2>
 
     <label>Agente Executor</label>
-
     <select id="insert_agent">
       <option value="meshwave65">MeshWave Default</option>
     </select>
 
-    <label>Agent Override (Opcional)</label>
-
+    <label>Agent Override</label>
     <input id="agent_override" placeholder="ex: custom_agent_v2">
 
-    <label>Target URLs (um por linha)</label>
+    <label>URLs</label>
+    <textarea id="task_url" placeholder="https://..."></textarea>
 
-    <textarea
-      id="task_url"
-      placeholder="https://exemplo.com/pagina-1&#10;https://exemplo.com/pagina-2"
-      style="
-        width:100%;
-        min-height:120px;
-        background:#1a2433;
-        color:white;
-        border:1px solid #263447;
-        border-radius:6px;
-        padding:10px;
-        margin-top:5px;
-        font-family:inherit;
-        resize:vertical;
-      ">
-    </textarea>
-
-    <div style="
-      margin-top:15px;
-      display:flex;
-      gap:10px;
-      align-items:center;
-    ">
-
-      <input
-        type="file"
-        id="file_upload"
-        style="display:none"
-        onchange="handleFileUpload(event)"
-        accept=".txt,.csv">
-
-      <button
-        onclick="document.getElementById('file_upload').click()"
-        style="
-          background:#1a2433;
-          color:#4ea1ff;
-          border:1px solid #4ea1ff;
-          padding:10px 15px;
-          border-radius:6px;
-          cursor:pointer;
-          font-weight:bold;
-          font-size:13px;
-        ">
-
-        📁 Upload de Lista (.txt / .csv)
-
-      </button>
-
-      <span style="font-size:11px; color:#8aa0b5;">
-        Ou cole os links acima
-      </span>
-
-    </div>
-
-    <button
-      onclick="insertTask()"
-      style="
-        margin-top:25px;
-        background:#4ea1ff;
-        color:white;
-        border:none;
-        padding:14px;
-        border-radius:6px;
-        cursor:pointer;
-        font-weight:bold;
-        width:100%;
-      ">
-
-      Iniciar Processo
-
-    </button>
-
+    <button onclick="insertTask()">Iniciar Processo</button>
   </div>
-
 </div>
 
 <!-- ================= TASKS ================= -->
 <div class="tab" id="tab3">
-
-  <div
-    style="
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      margin-bottom: 20px;
-    ">
-
-    <h2 style="margin:0;">
-      Gerenciador de Tarefas
-    </h2>
-
-  </div>
-
-  <div class="task-toolbar">
-
-    <button onclick="runAction('PLAY')" class="btn-glossy btn-play" title="Play">▶</button>
-    <button onclick="runAction('PAUSE')" class="btn-glossy btn-pause" title="Pause">⏸</button>
-    <button onclick="runAction('STOP')" class="btn-glossy btn-stop" title="Stop">■</button>
-    <button onclick="runAction('DELETE')" class="btn-glossy btn-delete" title="Delete">🗑</button>
-    <button onclick="loadTasks()" class="btn-glossy btn-refresh" title="Refresh">⟳</button>
-
-    <div style="display:flex; gap:10px; margin-left: 20px;">
-
-      <select id="filter_agent" style="width:140px; margin:0;">
-        <option value="ALL">All Agents</option>
-      </select>
-
-      <select id="filter_llm" style="width:140px; margin:0;">
-        <option value="ALL">All LLM</option>
-      </select>
-
-    </div>
-
-  </div>
-
-  <div
-    class="task-row"
-    style="
-      background: #111826;
-      font-weight: bold;
-      font-size: 11px;
-      border-radius: 8px 8px 0 0;
-      border-bottom: 2px solid #4ea1ff;
-    ">
-
-    <div style="display:flex; justify-content:center;">
-      <input type="checkbox" onchange="toggleAllTasks(this)">
-    </div>
-
-    <div style="text-align: center;">
-      STATUS
-    </div>
-
-    <div>
-      DETALHES DA TAREFA
-    </div>
-
-    <div style="text-align: center;">
-      EXTRACTOR
-    </div>
-
-    <div style="text-align: center;">
-      DOWNLOADER
-    </div>
-
-  </div>
-
+  <h2>Gerenciador de Tarefas</h2>
   <div id="tasks"></div>
-
 </div>
 
 <!-- ================= FILES ================= -->
 <div class="tab" id="tab4">
-
-  <div class="manager-layout">
-
-    <!-- SIDEBAR -->
-    <div class="manager-sidebar">
-
-      <div class="manager-header">
-
-        <span>
-          Explorador de Arquivos
-        </span>
-
-        <button
-          onclick="loadFiles()"
-          style="
-            background:none;
-            border:none;
-            color:#4ea1ff;
-            cursor:pointer;
-          ">
-
-          ⟳
-
-        </button>
-
-      </div>
-
-      <!-- FILTROS -->
-      <div
-        style="
-          padding:12px;
-          border-bottom:1px solid #1f2a3a;
-          display:flex;
-          gap:10px;
-        ">
-
-        <select
-          id="file_filter_agent"
-          onchange="renderFileTree()"
-          style="
-            flex:1;
-            margin:0;
-          ">
-
-          <option value="ALL">
-            All Agents
-          </option>
-
-        </select>
-
-        <select
-          id="file_filter_llm"
-          onchange="renderFileTree()"
-          style="
-            flex:1;
-            margin:0;
-          ">
-
-          <option value="ALL">
-            All LLM
-          </option>
-
-        </select>
-
-      </div>
-
-      <div id="files" class="manager-list">
-        <!-- Lista de arquivos -->
-      </div>
-
-    </div>
-
-    <!-- MAIN -->
-    <div class="manager-main">
-
-      <div
-        class="manager-header"
-        id="fileNameDisplay">
-
-        Visualização do Documento
-
-      </div>
-
-      <div
-        id="filePreview"
-        class="manager-preview">
-
-        <div
-          style="
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            height:100%;
-            color:#8aa0b5;
-          ">
-
-          <span style="font-size:48px;">
-            📄
-          </span>
-
-          <p>
-            Selecione um arquivo para visualizar o conteúdo
-          </p>
-
-        </div>
-
-      </div>
-
-    </div>
-
-  </div>
-
+  <h2>Arquivos</h2>
+  <div id="files"></div>
 </div>
 
 <!-- ================= SEARCH ================= -->
 <div class="tab" id="tab5">
+  <h2>Busca</h2>
+  <input id="searchInput" placeholder="Pesquisar...">
+  <button onclick="performSearch()">Pesquisar</button>
 
-  <div class="manager-layout">
-
-    <div class="manager-sidebar">
-
-      <div class="manager-header">
-        Busca Inteligente
-      </div>
-
-      <div class="search-modes">
-
-        <button onclick="setSearchMode('DEFAULT')" class="btn-mode active" id="modeDefault">
-          PADRÃO
-        </button>
-
-        <button onclick="setSearchMode('RESUMO')" class="btn-mode" id="modeResumo">
-          RESUMO
-        </button>
-
-        <button onclick="setSearchMode('ENRICH')" class="btn-mode" id="modeEnrich">
-          ENRICH
-        </button>
-
-      </div>
-
-      <div style="padding:15px; border-bottom:1px solid #1f2a3a;">
-
-        <input id="searchInput" placeholder="O que você procura?">
-
-        <button
-          onclick="performSearch()"
-          style="
-            width:100%;
-            margin-top:10px;
-            background:#4ea1ff;
-            color:white;
-            border:none;
-            padding:10px;
-            border-radius:6px;
-            cursor:pointer;
-            font-weight:bold;
-          ">
-
-          Pesquisar
-
-        </button>
-
-      </div>
-
-      <div id="searchResults" class="manager-list"></div>
-
-    </div>
-
-    <div class="manager-main">
-
-      <div class="manager-header">
-        Painel de Resultados / Relatório
-      </div>
-
-      <div id="searchPreview" class="manager-preview">
-
-        <div
-          style="
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            height:100%;
-            color:#8aa0b5;
-          ">
-
-          <span style="font-size:48px;">
-            🔍
-          </span>
-
-          <p>
-            Aguardando pesquisa...
-          </p>
-
-        </div>
-
-      </div>
-
-    </div>
-
-  </div>
-
+  <div id="searchResults"></div>
 </div>
 
 <!-- ================= PROFILE ================= -->
-<span style="opacity:0.7;">Usuário:</span>
-<b id="navUserName">Guest</b>
+<div class="tab" id="tab6">
+  <h2>Profile</h2>
+
+  <div class="user-bar">
+    <span style="opacity:0.7;">Usuário:</span>
+    <b id="navUserNameProfile">Guest</b>
+  </div>
+</div>
 
 <script>
   function syncUserName() {
-    const el = document.getElementById("navUserName");
-    if (!el) return;
-
     const name =
       window.USER?.full_name ||
       window.USER?.user_name ||
       "Guest";
 
-    el.textContent = name;
+    const el1 = document.getElementById("navUserName");
+    const el2 = document.getElementById("navUserNameProfile");
+
+    if (el1) el1.textContent = name;
+    if (el2) el2.textContent = name;
   }
 
-  // tenta imediatamente
   syncUserName();
 
-  // garante depois do login/session restore
-  const interval = setInterval(() => {
-    syncUserName();
-    if (window.USER?.full_name) clearInterval(interval);
-  }, 300);
+  setInterval(syncUserName, 500);
 </script>
 
 <script type="module" src="/src/main.js"></script>
+
 </body>
 </html>
