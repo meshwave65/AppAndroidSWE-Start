@@ -1,29 +1,27 @@
 /**
  * ============================================================
- * SOFIA WEB EXTRACTOR - MOBILE FIRST
+ * SOFIA WEB EXTRACTOR - MOBILE FIRST (REAL FUNCTIONALITY)
  * ============================================================
  *
- * Version: 2.0.0 (Mobile-First)
+ * Version: 2.0.0 (Mobile-First with Real Backend)
  * Updated: 2026-05-21
  *
  * Description:
- * Core frontend controller for task orchestration, file
- * navigation, authentication session handling and API
- * integration with appsofia.meshwave.com.br.
- * Fully optimized for mobile devices with responsive design.
+ * Core frontend controller with REAL functionality connected to:
+ * - Supabase (Auth, Database)
+ * - appsofia.meshwave.com.br (API)
  */
 
 "use strict";
 
 import "./style.css";
+import { supabase } from "./lib/supabase.js";
 
 // ============================================================
 // CONSTANTS
 // ============================================================
-const MESH_WAVE_UUID = "7891b8f4-68cc-4344-89e1-c000b80918bb";
-const API_BASE_URL = "https://appsofia.meshwave.com.br";
-const SUPABASE_URL = "https://your-supabase-url.supabase.co";
-const SUPABASE_KEY = "your-supabase-key";
+const MESH_WAVE_UUID = import.meta.env.VITE_MESHWAVE_CLIENT_ID || "7891b8f4-68cc-4344-89e1-c000b80918bb";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://appsofia.meshwave.com.br";
 
 // ============================================================
 // STATE MANAGEMENT
@@ -62,7 +60,6 @@ function showTab(n) {
   const el = document.getElementById("tab" + n);
   if (el) {
     el.classList.add("active");
-    // Update nav button active state
     document.querySelectorAll(".nav-btn").forEach(btn => btn.classList.remove("active"));
     const navBtns = document.querySelectorAll(".nav-btn");
     if (navBtns[n - 1]) navBtns[n - 1].classList.add("active");
@@ -145,50 +142,7 @@ function updateUserDisplay() {
 }
 
 // ============================================================
-// MOCK SUPABASE (Replace with real Supabase client)
-// ============================================================
-
-const supabase = {
-  from: (table) => ({
-    select: (fields) => ({
-      eq: (field, value) => ({
-        maybeSingle: async () => ({ data: null, error: null }),
-        order: (field, opts) => ({
-          then: async (cb) => cb({ data: [], error: null })
-        })
-      }),
-      order: (field, opts) => ({
-        then: async (cb) => cb({ data: [], error: null })
-      })
-    }),
-    insert: (data) => ({
-      select: () => ({
-        maybeSingle: async () => ({ data: null, error: null })
-      })
-    }),
-    update: (data) => ({
-      eq: (field, value) => ({
-        then: async (cb) => cb({ data: null, error: null })
-      })
-    })
-  }),
-  auth: {
-    signInWithPassword: async (credentials) => ({
-      data: { user: null },
-      error: null
-    }),
-    signUp: async (credentials) => ({
-      data: { user: null },
-      error: null
-    }),
-    getSession: async () => ({
-      data: { session: null }
-    })
-  }
-};
-
-// ============================================================
-// AUTHENTICATION
+// AUTHENTICATION (REAL)
 // ============================================================
 
 async function login() {
@@ -201,14 +155,40 @@ async function login() {
   }
 
   try {
-    // Mock login - Replace with real Supabase call
+    // Buscar cliente no banco de dados
+    const { data: client, error: clientError } = await supabase
+      .from("clients")
+      .select("*")
+      .or(`email.eq."${identifier}",user_name.eq."${identifier}"`)
+      .maybeSingle();
+
+    if (clientError || !client) {
+      showMessage("auth_msg", "Usuário não encontrado", "error");
+      return;
+    }
+
+    // Fazer login com Supabase Auth
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: client.email,
+      password
+    });
+
+    if (error || !data?.user) {
+      showMessage("auth_msg", "Falha na autenticação", "error");
+      return;
+    }
+
+    // Atualizar estado global
     SESSION.logged = true;
     USER = {
-      id: "user_" + Date.now(),
-      user_name: identifier.split("@")[0],
-      full_name: "Test User",
-      email: identifier
+      id: data.user.id,
+      user_name: client.user_name,
+      full_name: client.full_name,
+      email: client.email
     };
+
+    // Salvar no localStorage
+    localStorage.setItem("sofia_user", JSON.stringify(USER));
 
     updateUserDisplay();
     showToast("Login realizado com sucesso!", "success");
@@ -217,6 +197,7 @@ async function login() {
     await loadTasks();
     await loadFiles();
   } catch (error) {
+    console.error("Login error:", error);
     showMessage("auth_msg", "Erro ao fazer login", "error");
   }
 }
@@ -244,29 +225,98 @@ async function registerUser() {
     return;
   }
 
+  const username = customUsername || email.split("@")[0];
+
   try {
-    // Mock registration - Replace with real Supabase call
+    // Validar código de convite
+    const { data: invite, error: inviteError } = await supabase
+      .from("invites_dev")
+      .select("*")
+      .eq("code", code)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (inviteError || !invite) {
+      showMessage("reg_msg", "Código de convite inválido ou já utilizado", "error");
+      return;
+    }
+
+    // Verificar se username já existe
+    const { data: existingUsername } = await supabase
+      .from("clients")
+      .select("client_uuid")
+      .eq("user_name", username)
+      .maybeSingle();
+
+    if (existingUsername) {
+      showMessage("reg_msg", "Este nome de usuário já está em uso", "error");
+      return;
+    }
+
+    // Criar usuário no Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password: pass
+    });
+
+    if (authError || !authData?.user) {
+      showMessage("reg_msg", authError?.message || "Erro ao criar usuário", "error");
+      return;
+    }
+
+    // Criar perfil do cliente
+    const { error: profileError } = await supabase.from("clients").insert([{
+      owner_user_id: authData.user.id,
+      user_name: username,
+      full_name: fullName,
+      email: email,
+      client_id: Date.now()
+    }]);
+
+    if (profileError) {
+      showMessage("reg_msg", "Erro ao criar perfil do usuário", "error");
+      return;
+    }
+
+    // Marcar convite como usado
+    await supabase.from("invites_dev").update({ status: "used" }).eq("code", code);
+
     showMessage("reg_msg", "Conta criada com sucesso!", "success");
     setTimeout(() => showTab(1), 1500);
   } catch (error) {
+    console.error("Registration error:", error);
     showMessage("reg_msg", "Erro ao criar conta", "error");
   }
 }
 
 async function restoreSession() {
-  // Mock session restore - Replace with real Supabase call
-  const savedUser = localStorage.getItem("sofia_user");
-  if (savedUser) {
-    try {
-      USER = JSON.parse(savedUser);
-      SESSION.logged = true;
-      updateUserDisplay();
-      await loadAgentsAndLLMs();
-      await loadTasks();
-      await loadFiles();
-    } catch (e) {
-      console.error("Failed to restore session:", e);
-    }
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data: client } = await supabase
+      .from("clients")
+      .select("*")
+      .eq("owner_user_id", session.user.id)
+      .maybeSingle();
+
+    if (!client) return;
+
+    SESSION.logged = true;
+    USER = {
+      id: session.user.id,
+      user_name: client.user_name,
+      full_name: client.full_name,
+      email: client.email
+    };
+
+    localStorage.setItem("sofia_user", JSON.stringify(USER));
+    updateUserDisplay();
+    await loadAgentsAndLLMs();
+    await loadTasks();
+    await loadFiles();
+  } catch (error) {
+    console.error("Session restore error:", error);
   }
 }
 
@@ -278,19 +328,21 @@ async function loadAgentsAndLLMs() {
   if (!SESSION.logged) return;
 
   try {
-    // Mock data - Replace with real Supabase call
-    AGENTS = [
-      { agent_name: "MeshWave Default" },
-      { agent_name: "Custom Agent 1" }
-    ];
+    const { data: agentsData } = await supabase
+      .from("user_agents")
+      .select("agent_name")
+      .order("agent_name", { ascending: true });
 
-    LLM_PROVIDERS = [
-      { origin_provider: "chatgpt" },
-      { origin_provider: "claude" },
-      { origin_provider: "grok" }
-    ];
+    AGENTS = agentsData || [];
 
-    // Update agent selects
+    const { data: llmData } = await supabase
+      .from("user_origin_providers")
+      .select("origin_provider")
+      .order("origin_provider", { ascending: true });
+
+    LLM_PROVIDERS = llmData || [];
+
+    // Atualizar selects de agentes
     const agentSelects = [
       document.getElementById("insert_agent"),
       document.getElementById("filter_agent")
@@ -318,7 +370,7 @@ async function loadAgentsAndLLMs() {
       if (current) select.value = current;
     });
 
-    // Update LLM selects
+    // Atualizar selects de LLM
     const llmSelects = [
       document.getElementById("filter_llm"),
       document.getElementById("file_filter_llm")
@@ -349,27 +401,31 @@ async function loadAgentsAndLLMs() {
 }
 
 // ============================================================
-// TASKS
+// TASKS (REAL)
 // ============================================================
 
 async function loadTasks() {
   if (!SESSION.logged) return;
 
   try {
-    // Mock data - Replace with real API call
-    TASKS = [
-      {
-        id: "task_001",
-        full_url: "https://example.com/page-1",
-        origin_provider: "chatgpt",
-        agente: "MeshWave Default",
-        status: "DONE",
-        extractor_status: "DONE",
-        downloader_status: "DONE",
-        created_at: new Date().toISOString()
-      }
-    ];
+    let query = supabase.from("appsofia_tasks").select("*").eq("session_user_id", USER.id);
 
+    const filterAgent = document.getElementById("filter_agent")?.value;
+    const filterLLM = document.getElementById("filter_llm")?.value;
+    const filterStatus = document.getElementById("filter_status")?.value;
+
+    if (filterAgent && filterAgent !== "ALL") query = query.eq("agente", filterAgent);
+    if (filterLLM && filterLLM !== "ALL") query = query.eq("origin_provider", filterLLM);
+    if (filterStatus && filterStatus !== "ALL") query = query.eq("status", filterStatus);
+
+    const { data, error } = await query.order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error loading tasks:", error);
+      return;
+    }
+
+    TASKS = data || [];
     renderTasks();
   } catch (error) {
     console.error("Error loading tasks:", error);
@@ -431,11 +487,47 @@ async function insertTask() {
   const agentName = document.getElementById("agent_override").value || document.getElementById("insert_agent").value;
 
   try {
-    // Mock insertion - Replace with real API call
+    // Garantir que o agente existe
+    const { data: agent } = await supabase
+      .from("user_agents")
+      .select("id")
+      .eq("user_uuid", USER.id)
+      .eq("agent_name", agentName)
+      .maybeSingle();
+
+    if (!agent) {
+      await supabase.from("user_agents").insert([{
+        user_uuid: USER.id,
+        client_uuid: MESH_WAVE_UUID,
+        agent_name: agentName
+      }]);
+    }
+
+    // Inserir tarefas
+    const payloads = urls.map(url => ({
+      user_name: USER.user_name,
+      agente: agentName,
+      full_url: url,
+      session_user_id: USER.id,
+      user_uuid: USER.id,
+      slug: extractSlugFromUrl(url),
+      client_uuid: MESH_WAVE_UUID,
+      origin_provider: extractOriginProvider(url),
+      status: "STAGED"
+    }));
+
+    const { error } = await supabase.from("appsofia_tasks").insert(payloads);
+
+    if (error) {
+      showToast("Erro ao inserir tarefa", "error");
+      return;
+    }
+
     showToast(`${urls.length} tarefa(s) inserida(s) com sucesso!`, "success");
     document.getElementById("task_url").value = "";
     await loadTasks();
   } catch (error) {
+    console.error("Error inserting task:", error);
     showToast("Erro ao inserir tarefa", "error");
   }
 }
@@ -471,7 +563,7 @@ function runAction(action) {
 }
 
 // ============================================================
-// FILES
+// FILES (REAL)
 // ============================================================
 
 window.setFileAgentFilter = (val) => {
@@ -494,22 +586,43 @@ async function loadFiles() {
   if (!SESSION.logged) return;
 
   try {
-    // Mock data - Replace with real API call
-    FILES_DATA = [
-      {
-        provider: "chatgpt",
-        tasks: [
-          {
-            task_id: "task_001",
-            files: [
-              { filename: "document_001.pdf", path: "/files/doc1.pdf" },
-              { filename: "image_001.png", path: "/files/img1.png" }
-            ]
-          }
-        ]
-      }
-    ];
+    const url = `${API_BASE_URL}/files?user_name=${USER.user_name}&client_id=${MESH_WAVE_UUID}`;
+    const res = await fetch(url);
+    const json = await res.json();
+    let providers = json?.data?.providers || [];
 
+    // Filtrar por LLM
+    if (FILE_FILTER_LLM !== "ALL") {
+      providers = providers.filter(p =>
+        (p.provider || "").toLowerCase() === FILE_FILTER_LLM.toLowerCase()
+      );
+    }
+
+    // Filtrar por Agente
+    if (FILE_FILTER_AGENT !== "ALL") {
+      providers = providers.map(p => ({
+        ...p,
+        tasks: (p.tasks || []).filter(t => (t.agente || t.agent_name) === FILE_FILTER_AGENT)
+      })).filter(p => p.tasks.length > 0);
+    }
+
+    // Filtrar por Slug
+    if (FILE_FILTER_SLUG !== "") {
+      const q = FILE_FILTER_SLUG.toLowerCase().trim();
+      providers = providers.map(p => {
+        const tasks = Array.isArray(p.tasks) ? p.tasks : [];
+        const filteredTasks = tasks.filter(t => {
+          const slugVal = (t.slug ?? "").toString().toLowerCase();
+          const idVal = (t.id ?? "").toString().toLowerCase();
+          const files = Array.isArray(t.files) ? t.files : [];
+          const fileMatch = files.some(f => (f.filename ?? "").toString().toLowerCase().includes(q));
+          return slugVal.includes(q) || idVal.includes(q) || fileMatch;
+        });
+        return { ...p, tasks: filteredTasks };
+      }).filter(p => Array.isArray(p.tasks) && p.tasks.length > 0);
+    }
+
+    FILES_DATA = providers;
     renderFileTree();
   } catch (error) {
     console.error("Error loading files:", error);
@@ -556,13 +669,16 @@ function previewFile(file, element) {
 
   preview.innerHTML = "Carregando...";
   const ext = file.filename.split(".").pop().toLowerCase();
+  const fileUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(file.path)}&download=false`;
 
   if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) {
-    preview.innerHTML = `<img src="${file.path}" style="max-width:100%;">`;
+    preview.innerHTML = `<img src="${fileUrl}" style="max-width:100%;">`;
   } else if (ext === "pdf") {
-    preview.innerHTML = `<iframe src="${file.path}" style="width:100%;height:100%;border:none;"></iframe>`;
+    preview.innerHTML = `<iframe src="${fileUrl}" style="width:100%;height:100%;border:none;"></iframe>`;
   } else if (["txt", "md", "json", "log", "csv"].includes(ext)) {
-    preview.innerHTML = `<pre>Arquivo: ${file.filename}</pre>`;
+    fetch(fileUrl).then(res => res.text()).then(text => {
+      preview.innerHTML = `<pre style="overflow:auto;white-space:pre-wrap;word-wrap:break-word;">${text}</pre>`;
+    });
   } else {
     preview.innerHTML = "Formato não suportado";
   }
@@ -573,7 +689,7 @@ function downloadFile(path) {
 }
 
 // ============================================================
-// SEARCH
+// SEARCH (REAL)
 // ============================================================
 
 function setSearchMode(mode) {
@@ -597,18 +713,14 @@ async function performSearch() {
   if (container) container.innerHTML = "Buscando...";
 
   try {
-    // Mock search - Replace with real API call
-    SEARCH_RESULTS = [
-      {
-        filename: "document_001.pdf",
-        task_id: "task_001",
-        path: "/files/doc1.pdf"
-      }
-    ];
-
+    const url = `${API_BASE_URL}/search?q=${encodeURIComponent(query)}&mode=${SEARCH_MODE}&match=${SEARCH_MATCH_MODE}&user_name=${USER.user_name}&client_id=${MESH_WAVE_UUID}`;
+    const res = await fetch(url);
+    const json = await res.json();
+    SEARCH_RESULTS = json.results || [];
     renderSearchResults();
   } catch (error) {
     console.error("Error performing search:", error);
+    showToast("Erro ao buscar", "error");
   }
 }
 
@@ -650,7 +762,7 @@ function previewSearchResult(result, element) {
 }
 
 // ============================================================
-// PROFILE
+// PROFILE (REAL)
 // ============================================================
 
 async function saveProfile() {
@@ -663,11 +775,21 @@ async function saveProfile() {
   };
 
   try {
-    // Mock save - Replace with real Supabase call
+    const { error } = await supabase
+      .from("clients")
+      .update(updates)
+      .eq("owner_user_id", USER.id);
+
+    if (error) {
+      showMessage("profile_msg", "Erro ao atualizar perfil", "error");
+      return;
+    }
+
     USER = { ...USER, ...updates };
     localStorage.setItem("sofia_user", JSON.stringify(USER));
     showMessage("profile_msg", "Perfil atualizado com sucesso!", "success");
   } catch (error) {
+    console.error("Error saving profile:", error);
     showMessage("profile_msg", "Erro ao atualizar perfil", "error");
   }
 }
@@ -700,10 +822,7 @@ window.setFileSlugFilter = setFileSlugFilter;
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // Show first tab by default
   showTab(1);
-
-  // Try to restore session
   await restoreSession();
 
   if (SESSION.logged) {
@@ -711,5 +830,4 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-// Update user display periodically
 setInterval(updateUserDisplay, 1000);
