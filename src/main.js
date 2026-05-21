@@ -17,25 +17,17 @@
 import "./style.css";
 import { supabase } from "./lib/supabase.js";
 
-// ============================================================
-// CONSTANTS
-// ============================================================
-const MESH_WAVE_UUID = import.meta.env.VITE_MESHWAVE_CLIENT_ID || "7891b8f4-68cc-4344-89e1-c000b80918bb";
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://appsofia.meshwave.com.br";
+const MESH_WAVE_UUID = "7891b8f4-68cc-4344-89e1-c000b80918bb";
+const API_BASE_URL = "https://appsofia.meshwave.com.br";
 
-// ============================================================
-// STATE MANAGEMENT
-// ============================================================
-let USER = {
-  id: null,
-  user_name: "guest",
-  full_name: "Guest User",
-  email: null
-};
-
+// ======================
+// STATE
+// ======================
+let USER = { id: null, user_name: "guest", full_name: "Guest User", email: null };
 let SESSION = { logged: false };
 let TASKS = [];
 let TASK_SELECTION = new Set();
+
 let FILES_DATA = [];
 let SELECTED_FILE = null;
 
@@ -49,10 +41,9 @@ let FILE_FILTER_AGENT = "ALL";
 let FILE_FILTER_LLM = "ALL";
 let FILE_FILTER_SLUG = "";
 
-// ============================================================
-// UTILITY FUNCTIONS
-// ============================================================
-
+// ======================
+// HELPERS
+// ======================
 function showTab(n) {
   document.querySelectorAll(".tab").forEach(t => {
     t.classList.remove("active");
@@ -81,13 +72,6 @@ function showMessage(elementId, message, type = "info") {
   if (!el) return;
   el.textContent = message;
   el.className = `message show ${type}`;
-}
-
-function hideMessage(elementId) {
-  const el = document.getElementById(elementId);
-  if (el) {
-    el.classList.remove("show");
-  }
 }
 
 function extractSlugFromUrl(url) {
@@ -135,71 +119,79 @@ function getStatusClass(status) {
   return "status-staged";
 }
 
+async function ensureAgent(user_uuid, agent_name) {
+  if (!agent_name || !user_uuid) return;
+  const { data: existing } = await supabase
+    .from("user_agents")
+    .select("id")
+    .eq("user_uuid", user_uuid)
+    .eq("agent_name", agent_name)
+    .maybeSingle();
+  if (existing) return existing;
+  const { data, error } = await supabase
+    .from("user_agents")
+    .insert([{
+      user_uuid,
+      client_uuid: MESH_WAVE_UUID,
+      agent_name
+    }])
+    .select()
+    .maybeSingle();
+  if (error) return null;
+  return data;
+}
+
 function updateUserDisplay() {
   const name = USER.full_name || USER.user_name || "Guest";
   const headerEl = document.getElementById("headerUserName");
   if (headerEl) headerEl.textContent = name;
 }
 
-// ============================================================
-// AUTHENTICATION (REAL)
-// ============================================================
-
+// ======================
+// AUTH & LOGIN
+// ======================
 async function login() {
   const identifier = document.getElementById("login_email")?.value?.trim();
   const password = document.getElementById("login_pass")?.value;
-
   if (!identifier || !password) {
     showMessage("auth_msg", "Preencha os campos", "error");
     return;
   }
-
-  try {
-    // Buscar cliente no banco de dados
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("*")
-      .or(`email.eq."${identifier}",user_name.eq."${identifier}"`)
-      .maybeSingle();
-
-    if (clientError || !client) {
-      showMessage("auth_msg", "Usuário não encontrado", "error");
-      return;
-    }
-
-    // Fazer login com Supabase Auth
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: client.email,
-      password
-    });
-
-    if (error || !data?.user) {
-      showMessage("auth_msg", "Falha na autenticação", "error");
-      return;
-    }
-
-    // Atualizar estado global
-    SESSION.logged = true;
-    USER = {
-      id: data.user.id,
-      user_name: client.user_name,
-      full_name: client.full_name,
-      email: client.email
-    };
-
-    // Salvar no localStorage
-    localStorage.setItem("sofia_user", JSON.stringify(USER));
-
-    updateUserDisplay();
-    showToast("Login realizado com sucesso!", "success");
-    showTab(3);
-    await loadAgentsAndLLMs();
-    await loadTasks();
-    await loadFiles();
-  } catch (error) {
-    console.error("Login error:", error);
-    showMessage("auth_msg", "Erro ao fazer login", "error");
+  const { data: client, error: clientError } = await supabase
+    .from("clients")
+    .select("*")
+    .or(`email.eq."${identifier}",user_name.eq."${identifier}"`)
+    .maybeSingle();
+  if (clientError || !client) {
+    showMessage("auth_msg", "Usuário não encontrado", "error");
+    return;
   }
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: client.email,
+    password
+  });
+  if (error || !data?.user) {
+    showMessage("auth_msg", "Falha na autenticação", "error");
+    return;
+  }
+  SESSION.logged = true;
+  USER = {
+    id: data.user.id,
+    user_name: client.user_name,
+    full_name: client.full_name,
+    email: client.email
+  };
+  
+  if (document.getElementById("p_username")) document.getElementById("p_username").value = USER.user_name;
+  if (document.getElementById("p_name")) document.getElementById("p_name").value = USER.full_name || "";
+  if (document.getElementById("p_email")) document.getElementById("p_email").value = USER.email || "";
+  
+  updateUserDisplay();
+  showToast("Login realizado com sucesso!", "success");
+  showTab(3);
+  await loadAgentsAndLLMs();
+  await loadTasks();
+  await loadFiles();
 }
 
 async function registerUser() {
@@ -209,84 +201,56 @@ async function registerUser() {
   const code = document.getElementById("reg_code")?.value?.trim()?.toUpperCase();
   const pass = document.getElementById("reg_pass")?.value;
   const pass2 = document.getElementById("reg_pass2")?.value;
+  const msg = document.getElementById("reg_msg");
 
+  if (msg) msg.innerText = "";
   if (!fullName || !email || !code || !pass || !pass2) {
     showMessage("reg_msg", "Preencha todos os campos obrigatórios", "error");
     return;
   }
-
   if (pass !== pass2) {
     showMessage("reg_msg", "As senhas não conferem", "error");
     return;
   }
-
   if (pass.length < 6) {
     showMessage("reg_msg", "Senha deve possuir no mínimo 6 caracteres", "error");
     return;
   }
-
   const username = customUsername || email.split("@")[0];
+  const { data: invite, error: inviteError } = await supabase
+    .from("invites_dev")
+    .select("*")
+    .eq("code", code)
+    .eq("status", "active");
 
-  try {
-    // Validar código de convite
-    const { data: invite, error: inviteError } = await supabase
-      .from("invites_dev")
-      .select("*")
-      .eq("code", code)
-      .eq("status", "active")
-      .maybeSingle();
-
-    if (inviteError || !invite) {
-      showMessage("reg_msg", "Código de convite inválido ou já utilizado", "error");
-      return;
-    }
-
-    // Verificar se username já existe
-    const { data: existingUsername } = await supabase
-      .from("clients")
-      .select("client_uuid")
-      .eq("user_name", username)
-      .maybeSingle();
-
-    if (existingUsername) {
-      showMessage("reg_msg", "Este nome de usuário já está em uso", "error");
-      return;
-    }
-
-    // Criar usuário no Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password: pass
-    });
-
-    if (authError || !authData?.user) {
-      showMessage("reg_msg", authError?.message || "Erro ao criar usuário", "error");
-      return;
-    }
-
-    // Criar perfil do cliente
-    const { error: profileError } = await supabase.from("clients").insert([{
-      owner_user_id: authData.user.id,
-      user_name: username,
-      full_name: fullName,
-      email: email,
-      client_id: Date.now()
-    }]);
-
-    if (profileError) {
-      showMessage("reg_msg", "Erro ao criar perfil do usuário", "error");
-      return;
-    }
-
-    // Marcar convite como usado
-    await supabase.from("invites_dev").update({ status: "used" }).eq("code", code);
-
-    showMessage("reg_msg", "Conta criada com sucesso!", "success");
-    setTimeout(() => showTab(1), 1500);
-  } catch (error) {
-    console.error("Registration error:", error);
-    showMessage("reg_msg", "Erro ao criar conta", "error");
+  if (inviteError || !invite) {
+    showMessage("reg_msg", "Código de convite inválido ou já utilizado", "error");
+    return;
   }
+  const { data: existingUsername } = await supabase.from("clients").select("client_uuid").eq("user_name", username).maybeSingle();
+  if (existingUsername) {
+    showMessage("reg_msg", "Este nome de usuário já está em uso", "error");
+    return;
+  }
+  const { data: authData, error: authError } = await supabase.auth.signUp({ email, password: pass });
+  if (authError || !authData?.user) {
+    showMessage("reg_msg", authError?.message || "Erro ao criar usuário", "error");
+    return;
+  }
+  const { error: profileError } = await supabase.from("clients").insert([{
+    owner_user_id: authData.user.id,
+    user_name: username,
+    full_name: fullName,
+    email: email,
+    client_id: Date.now()
+  }]);
+  if (profileError) {
+    showMessage("reg_msg", "Erro ao criar perfil do usuário", "error");
+    return;
+  }
+  await supabase.from("invites_dev").update({ status: "used" }).eq("code", code);
+  showMessage("reg_msg", "Conta criada com sucesso!", "success");
+  setTimeout(() => { showTab(1); }, 1500);
 }
 
 async function restoreSession() {
@@ -310,7 +274,6 @@ async function restoreSession() {
       email: client.email
     };
 
-    localStorage.setItem("sofia_user", JSON.stringify(USER));
     updateUserDisplay();
     await loadAgentsAndLLMs();
     await loadTasks();
@@ -320,135 +283,91 @@ async function restoreSession() {
   }
 }
 
-// ============================================================
-// AGENTS & LLM
-// ============================================================
-
+// ======================
+// AGENTS + LLM FILTERS
+// ======================
 async function loadAgentsAndLLMs() {
   if (!SESSION.logged) return;
-
-  try {
-    const { data: agentsData } = await supabase
-      .from("user_agents")
-      .select("agent_name")
-      .order("agent_name", { ascending: true });
-
-    AGENTS = agentsData || [];
-
-    const { data: llmData } = await supabase
-      .from("user_origin_providers")
-      .select("origin_provider")
-      .order("origin_provider", { ascending: true });
-
-    LLM_PROVIDERS = llmData || [];
-
-    // Atualizar selects de agentes
-    const agentSelects = [
-      document.getElementById("insert_agent"),
-      document.getElementById("filter_agent")
-    ];
-
-    agentSelects.forEach(select => {
-      if (!select) return;
-      const current = select.value;
-      select.innerHTML = "";
-
-      if (select.id.includes("filter")) {
-        const opt = document.createElement("option");
-        opt.value = "ALL";
-        opt.innerText = "Todos os Agentes";
-        select.appendChild(opt);
-      }
-
-      AGENTS.forEach(agent => {
-        const opt = document.createElement("option");
-        opt.value = agent.agent_name;
-        opt.innerText = agent.agent_name;
-        select.appendChild(opt);
-      });
-
-      if (current) select.value = current;
+  const { data: agentsData } = await supabase.from("user_agents").select("agent_name").order("agent_name", { ascending: true });
+  AGENTS = agentsData || [];
+  const agentSelects = [
+    document.getElementById("insert_agent"),
+    document.getElementById("filter_agent")
+  ];
+  agentSelects.forEach(select => {
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = "";
+    if (select.id.includes("filter")) {
+      const opt = document.createElement("option");
+      opt.value = "ALL";
+      opt.innerText = "Todos os Agentes";
+      select.appendChild(opt);
+    }
+    AGENTS.forEach(agent => {
+      const opt = document.createElement("option");
+      opt.value = agent.agent_name;
+      opt.innerText = agent.agent_name;
+      select.appendChild(opt);
     });
+    if (current) select.value = current;
+  });
 
-    // Atualizar selects de LLM
-    const llmSelects = [
-      document.getElementById("filter_llm"),
-      document.getElementById("file_filter_llm")
-    ];
-
-    llmSelects.forEach(select => {
-      if (!select) return;
-      const current = select.value;
-      select.innerHTML = "";
-
-      const all = document.createElement("option");
-      all.value = "ALL";
-      all.innerText = "Todos os LLM";
-      select.appendChild(all);
-
-      LLM_PROVIDERS.forEach(provider => {
-        const opt = document.createElement("option");
-        opt.value = provider.origin_provider;
-        opt.innerText = provider.origin_provider.toUpperCase();
-        select.appendChild(opt);
-      });
-
-      if (current) select.value = current;
+  const { data: llmData } = await supabase.from("user_origin_providers").select("origin_provider").order("origin_provider", { ascending: true });
+  LLM_PROVIDERS = llmData || [];
+  const llmSelects = [
+    document.getElementById("filter_llm"),
+    document.getElementById("file_filter_llm")
+  ];
+  llmSelects.forEach(select => {
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = "";
+    const all = document.createElement("option");
+    all.value = "ALL";
+    all.innerText = "Todos os LLM";
+    select.appendChild(all);
+    LLM_PROVIDERS.forEach(provider => {
+      const opt = document.createElement("option");
+      opt.value = provider.origin_provider;
+      opt.innerText = provider.origin_provider.toUpperCase();
+      select.appendChild(opt);
     });
-  } catch (error) {
-    console.error("Error loading agents and LLMs:", error);
-  }
+    if (current) select.value = current;
+  });
 }
 
-// ============================================================
-// TASKS (REAL)
-// ============================================================
-
+// ======================
+// TASKS
+// ======================
 async function loadTasks() {
   if (!SESSION.logged) return;
-
-  try {
-    let query = supabase.from("appsofia_tasks").select("*").eq("session_user_id", USER.id);
-
-    const filterAgent = document.getElementById("filter_agent")?.value;
-    const filterLLM = document.getElementById("filter_llm")?.value;
-    const filterStatus = document.getElementById("filter_status")?.value;
-
-    if (filterAgent && filterAgent !== "ALL") query = query.eq("agente", filterAgent);
-    if (filterLLM && filterLLM !== "ALL") query = query.eq("origin_provider", filterLLM);
-    if (filterStatus && filterStatus !== "ALL") query = query.eq("status", filterStatus);
-
-    const { data, error } = await query.order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Error loading tasks:", error);
-      return;
-    }
-
-    TASKS = data || [];
-    renderTasks();
-  } catch (error) {
-    console.error("Error loading tasks:", error);
-  }
+  let query = supabase.from("appsofia_tasks").select("*").eq("session_user_id", USER.id);
+  const filterAgent = document.getElementById("filter_agent")?.value;
+  const filterLLM = document.getElementById("filter_llm")?.value;
+  const filterStatus = document.getElementById("filter_status")?.value;
+  if (filterAgent && filterAgent !== "ALL") query = query.eq("agente", filterAgent);
+  if (filterLLM && filterLLM !== "ALL") query = query.eq("origin_provider", filterLLM);
+  if (filterStatus && filterStatus !== "ALL") query = query.eq("status", filterStatus);
+  const { data, error } = await query.order("created_at", { ascending: false });
+  if (error) return;
+  TASKS = data || [];
+  renderTasks();
 }
 
 function renderTasks() {
   const container = document.getElementById("tasks");
   if (!container) return;
-
   container.innerHTML = "";
-
   if (TASKS.length === 0) {
     container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">Nenhuma tarefa encontrada</div>';
     return;
   }
-
   TASKS.forEach(t => {
-    const extStatus = t.extractor_status || t.status || "STAGED";
-    const dwnStatus = t.downloader_status || t.status || "STAGED";
-
     const card = document.createElement("div");
     card.className = "task-card";
+    const extStatus = t.extractor_status || t.status || "STAGED";
+    const dwnStatus = t.downloader_status || t.status || "STAGED";
     card.innerHTML = `
       <input type="checkbox" class="task-checkbox" onchange="toggleTaskSelection('${t.id}', this)">
       <div class="task-status">${getStatusIcon(extStatus)}</div>
@@ -464,78 +383,40 @@ function renderTasks() {
 }
 
 function toggleTaskSelection(id, cb) {
-  if (cb.checked) {
-    TASK_SELECTION.add(id);
-  } else {
-    TASK_SELECTION.delete(id);
-  }
+  if (cb.checked) TASK_SELECTION.add(id);
+  else TASK_SELECTION.delete(id);
 }
 
 async function insertTask() {
   const rawValue = document.getElementById("task_url").value.trim();
-  if (!rawValue) {
-    showToast("URL(s) obrigatória(s)", "error");
-    return;
-  }
-
+  if (!rawValue) { showToast("URL(s) obrigatória(s)", "error"); return; }
   const urls = rawValue.split("\n").map(u => u.trim()).filter(u => u.startsWith("http"));
-  if (urls.length === 0) {
-    showToast("Nenhuma URL válida encontrada", "error");
-    return;
-  }
-
+  if (urls.length === 0) { showToast("Nenhuma URL válida encontrada", "error"); return; }
   const agentName = document.getElementById("agent_override").value || document.getElementById("insert_agent").value;
-
-  try {
-    // Garantir que o agente existe
-    const { data: agent } = await supabase
-      .from("user_agents")
-      .select("id")
-      .eq("user_uuid", USER.id)
-      .eq("agent_name", agentName)
-      .maybeSingle();
-
-    if (!agent) {
-      await supabase.from("user_agents").insert([{
-        user_uuid: USER.id,
-        client_uuid: MESH_WAVE_UUID,
-        agent_name: agentName
-      }]);
-    }
-
-    // Inserir tarefas
-    const payloads = urls.map(url => ({
-      user_name: USER.user_name,
-      agente: agentName,
-      full_url: url,
-      session_user_id: USER.id,
-      user_uuid: USER.id,
-      slug: extractSlugFromUrl(url),
-      client_uuid: MESH_WAVE_UUID,
-      origin_provider: extractOriginProvider(url),
-      status: "STAGED"
-    }));
-
-    const { error } = await supabase.from("appsofia_tasks").insert(payloads);
-
-    if (error) {
-      showToast("Erro ao inserir tarefa", "error");
-      return;
-    }
-
+  await ensureAgent(USER.id, agentName);
+  const payloads = urls.map(url => ({
+    user_name: USER.user_name,
+    agente: agentName,
+    full_url: url,
+    session_user_id: USER.id,
+    user_uuid: USER.id,
+    slug: extractSlugFromUrl(url),
+    client_uuid: MESH_WAVE_UUID,
+    origin_provider: extractOriginProvider(url),
+    status: "STAGED"
+  }));
+  const { error } = await supabase.from("appsofia_tasks").insert(payloads);
+  if (error) showToast("Erro ao inserir tarefa", "error");
+  else {
     showToast(`${urls.length} tarefa(s) inserida(s) com sucesso!`, "success");
     document.getElementById("task_url").value = "";
-    await loadTasks();
-  } catch (error) {
-    console.error("Error inserting task:", error);
-    showToast("Erro ao inserir tarefa", "error");
+    loadTasks();
   }
 }
 
-function handleFileUpload(event) {
+async function handleFileUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
-
   const reader = new FileReader();
   reader.onload = (e) => {
     const content = e.target.result;
@@ -562,43 +443,40 @@ function runAction(action) {
   showToast(`Ação '${action}' executada em ${TASK_SELECTION.size} tarefa(s)`, "success");
 }
 
-// ============================================================
-// FILES (REAL)
-// ============================================================
-
+// ======================
+// FILES FILTERS
+// ======================
 window.setFileAgentFilter = (val) => {
   FILE_FILTER_AGENT = val;
   loadFiles();
 };
-
 window.setFileLLMFilter = (val) => {
   FILE_FILTER_LLM = val;
   loadFiles();
 };
-
 window.setFileSlugFilter = (val) => {
   const value = (val && val.target) ? val.target.value : val;
   FILE_FILTER_SLUG = value || "";
   loadFiles();
 };
 
+// ======================
+// FILES
+// ======================
 async function loadFiles() {
   if (!SESSION.logged) return;
-
+  const url = `${API_BASE_URL}/files?user_name=${USER.user_name}&client_id=${MESH_WAVE_UUID}`;
   try {
-    const url = `${API_BASE_URL}/files?user_name=${USER.user_name}&client_id=${MESH_WAVE_UUID}`;
     const res = await fetch(url);
     const json = await res.json();
     let providers = json?.data?.providers || [];
 
-    // Filtrar por LLM
     if (FILE_FILTER_LLM !== "ALL") {
-      providers = providers.filter(p =>
+      providers = providers.filter(p => 
         (p.provider || "").toLowerCase() === FILE_FILTER_LLM.toLowerCase()
       );
     }
 
-    // Filtrar por Agente
     if (FILE_FILTER_AGENT !== "ALL") {
       providers = providers.map(p => ({
         ...p,
@@ -606,7 +484,6 @@ async function loadFiles() {
       })).filter(p => p.tasks.length > 0);
     }
 
-    // Filtrar por Slug
     if (FILE_FILTER_SLUG !== "") {
       const q = FILE_FILTER_SLUG.toLowerCase().trim();
       providers = providers.map(p => {
@@ -632,20 +509,16 @@ async function loadFiles() {
 function renderFileTree() {
   const container = document.getElementById("files");
   if (!container) return;
-
   container.innerHTML = "";
-
   if (FILES_DATA.length === 0) {
     container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">Nenhum arquivo encontrado</div>';
     return;
   }
-
   FILES_DATA.forEach(provider => {
     const providerDiv = document.createElement("div");
     providerDiv.className = "file-item";
     providerDiv.innerHTML = `📁 ${provider.provider}`;
     container.appendChild(providerDiv);
-
     (provider.tasks || []).forEach(task => {
       (task.files || []).forEach(file => {
         const fileDiv = document.createElement("div");
@@ -688,10 +561,9 @@ function downloadFile(path) {
   window.open(`${API_BASE_URL}/api/file?path=${encodeURIComponent(path)}&download=true`, "_blank");
 }
 
-// ============================================================
-// SEARCH (REAL)
-// ============================================================
-
+// ======================
+// SEARCH
+// ======================
 function setSearchMode(mode) {
   SEARCH_MODE = mode;
   ["modeDefault", "modeResumo", "modeEnrich"].forEach(id => {
@@ -761,10 +633,9 @@ function previewSearchResult(result, element) {
   `;
 }
 
-// ============================================================
-// PROFILE (REAL)
-// ============================================================
-
+// ======================
+// PROFILE
+// ======================
 async function saveProfile() {
   const updates = {
     full_name: document.getElementById("p_name")?.value?.trim(),
@@ -786,7 +657,6 @@ async function saveProfile() {
     }
 
     USER = { ...USER, ...updates };
-    localStorage.setItem("sofia_user", JSON.stringify(USER));
     showMessage("profile_msg", "Perfil atualizado com sucesso!", "success");
   } catch (error) {
     console.error("Error saving profile:", error);
@@ -794,10 +664,9 @@ async function saveProfile() {
   }
 }
 
-// ============================================================
+// ======================
 // WINDOW EXPORTS
-// ============================================================
-
+// ======================
 window.showTab = showTab;
 window.login = login;
 window.registerUser = registerUser;
@@ -817,10 +686,9 @@ window.setFileAgentFilter = setFileAgentFilter;
 window.setFileLLMFilter = setFileLLMFilter;
 window.setFileSlugFilter = setFileSlugFilter;
 
-// ============================================================
+// ======================
 // INITIALIZATION
-// ============================================================
-
+// ======================
 document.addEventListener("DOMContentLoaded", async () => {
   showTab(1);
   await restoreSession();
