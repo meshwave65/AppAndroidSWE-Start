@@ -278,6 +278,21 @@
   <button class="nav-btn" onclick="showTab(6)" title="Profile">👤</button>
 </nav>
 
+<!-- ================= PREVIEW MODAL ================= -->
+<div id="previewModal" class="modal-overlay">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 class="modal-title" id="previewTitle">Preview</h3>
+      <button class="modal-close" onclick="closePreviewModal()">✕</button>
+    </div>
+    <div class="modal-body" id="previewBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closePreviewModal()">Fechar</button>
+      <button class="btn btn-primary" id="downloadBtn" onclick="downloadCurrentFile()">⬇️ Download</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================= TOAST NOTIFICATIONS ================= -->
 <div id="toast" class="toast"></div>
 

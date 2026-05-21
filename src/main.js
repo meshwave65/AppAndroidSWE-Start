@@ -30,6 +30,7 @@ let TASK_SELECTION = new Set();
 
 let FILES_DATA = [];
 let SELECTED_FILE = null;
+let CURRENT_PREVIEW_FILE = null;
 
 let SEARCH_MODE = "DEFAULT";
 let SEARCH_MATCH_MODE = "PARTIAL";
@@ -145,6 +146,56 @@ function updateUserDisplay() {
   const name = USER.full_name || USER.user_name || "Guest";
   const headerEl = document.getElementById("headerUserName");
   if (headerEl) headerEl.textContent = name;
+}
+
+// ======================
+// MODAL FUNCTIONS
+// ======================
+function openPreviewModal(file) {
+  CURRENT_PREVIEW_FILE = file;
+  const modal = document.getElementById("previewModal");
+  const title = document.getElementById("previewTitle");
+  const body = document.getElementById("previewBody");
+  
+  if (!modal || !title || !body) return;
+  
+  title.textContent = file.filename;
+  body.innerHTML = "Carregando...";
+  
+  const ext = file.filename.split(".").pop().toLowerCase();
+  const fileUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(file.path)}&download=false`;
+  
+  if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) {
+    body.innerHTML = `<img src="${fileUrl}" class="preview-image" alt="${file.filename}">`;
+  } else if (ext === "pdf") {
+    body.innerHTML = `<iframe src="${fileUrl}" style="width:100%;height:500px;border:none;border-radius:8px;"></iframe>`;
+  } else if (["txt", "md", "json", "log", "csv"].includes(ext)) {
+    fetch(fileUrl)
+      .then(res => res.text())
+      .then(text => {
+        const preview = text.length > 5000 ? text.substring(0, 5000) + "\n\n[... arquivo truncado ...]" : text;
+        body.innerHTML = `<div class="preview-text">${preview}</div>`;
+      })
+      .catch(() => {
+        body.innerHTML = "<div class='preview-text'>Erro ao carregar arquivo</div>";
+      });
+  } else {
+    body.innerHTML = "<div class='preview-text'>Formato não suportado para preview</div>";
+  }
+  
+  modal.classList.add("active");
+}
+
+function closePreviewModal() {
+  const modal = document.getElementById("previewModal");
+  if (modal) modal.classList.remove("active");
+  CURRENT_PREVIEW_FILE = null;
+}
+
+function downloadCurrentFile() {
+  if (!CURRENT_PREVIEW_FILE) return;
+  downloadFile(CURRENT_PREVIEW_FILE.path);
+  closePreviewModal();
 }
 
 // ======================
@@ -290,10 +341,13 @@ async function loadAgentsAndLLMs() {
   if (!SESSION.logged) return;
   const { data: agentsData } = await supabase.from("user_agents").select("agent_name").order("agent_name", { ascending: true });
   AGENTS = agentsData || [];
+  
   const agentSelects = [
     document.getElementById("insert_agent"),
-    document.getElementById("filter_agent")
+    document.getElementById("filter_agent"),
+    document.getElementById("file_filter_agent")
   ];
+  
   agentSelects.forEach(select => {
     if (!select) return;
     const current = select.value;
@@ -514,47 +568,65 @@ function renderFileTree() {
     container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">Nenhum arquivo encontrado</div>';
     return;
   }
-  FILES_DATA.forEach(provider => {
-    const providerDiv = document.createElement("div");
-    providerDiv.className = "file-item";
-    providerDiv.innerHTML = `📁 ${provider.provider}`;
-    container.appendChild(providerDiv);
-    (provider.tasks || []).forEach(task => {
+  
+  FILES_DATA.forEach((provider, providerIndex) => {
+    // Provider header (collapsible)
+    const providerHeader = document.createElement("div");
+    providerHeader.className = "collapsible-header collapsed";
+    providerHeader.innerHTML = `
+      <div>📁 ${provider.provider}</div>
+      <span class="toggle-icon">▼</span>
+    `;
+    container.appendChild(providerHeader);
+    
+    // Provider content
+    const providerContent = document.createElement("div");
+    providerContent.className = "collapsible-content collapsed";
+    providerContent.id = `provider-${providerIndex}`;
+    
+    // Add tasks to provider
+    (provider.tasks || []).forEach((task, taskIndex) => {
+      // Task header (collapsible)
+      const taskHeader = document.createElement("div");
+      taskHeader.className = "collapsible-header collapsed";
+      taskHeader.style.marginLeft = "15px";
+      taskHeader.innerHTML = `
+        <div>📋 Task: ${task.id}</div>
+        <span class="toggle-icon">▼</span>
+      `;
+      providerContent.appendChild(taskHeader);
+      
+      // Task content
+      const taskContent = document.createElement("div");
+      taskContent.className = "collapsible-content collapsed";
+      taskContent.id = `task-${providerIndex}-${taskIndex}`;
+      
+      // Add files to task
       (task.files || []).forEach(file => {
-        const fileDiv = document.createElement("div");
-        fileDiv.className = "file-item";
-        fileDiv.style.paddingLeft = "30px";
-        fileDiv.innerHTML = `📄 ${file.filename.split("_").pop()}`;
-        fileDiv.onclick = () => previewFile(file, fileDiv);
-        container.appendChild(fileDiv);
+        const fileItem = document.createElement("div");
+        fileItem.className = "file-item file-item-nested";
+        fileItem.innerHTML = `📄 ${file.filename.split("_").pop()}`;
+        fileItem.onclick = () => openPreviewModal(file);
+        taskContent.appendChild(fileItem);
       });
+      
+      providerContent.appendChild(taskContent);
+      
+      // Toggle task content
+      taskHeader.onclick = () => {
+        taskHeader.classList.toggle("collapsed");
+        taskContent.classList.toggle("collapsed");
+      };
     });
+    
+    container.appendChild(providerContent);
+    
+    // Toggle provider content
+    providerHeader.onclick = () => {
+      providerHeader.classList.toggle("collapsed");
+      providerContent.classList.toggle("collapsed");
+    };
   });
-}
-
-function previewFile(file, element) {
-  SELECTED_FILE = file;
-  document.querySelectorAll(".file-item").forEach(i => i.classList.remove("active"));
-  element.classList.add("active");
-
-  const preview = document.getElementById("filePreview");
-  if (!preview) return;
-
-  preview.innerHTML = "Carregando...";
-  const ext = file.filename.split(".").pop().toLowerCase();
-  const fileUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(file.path)}&download=false`;
-
-  if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) {
-    preview.innerHTML = `<img src="${fileUrl}" style="max-width:100%;">`;
-  } else if (ext === "pdf") {
-    preview.innerHTML = `<iframe src="${fileUrl}" style="width:100%;height:100%;border:none;"></iframe>`;
-  } else if (["txt", "md", "json", "log", "csv"].includes(ext)) {
-    fetch(fileUrl).then(res => res.text()).then(text => {
-      preview.innerHTML = `<pre style="overflow:auto;white-space:pre-wrap;word-wrap:break-word;">${text}</pre>`;
-    });
-  } else {
-    preview.innerHTML = "Formato não suportado";
-  }
 }
 
 function downloadFile(path) {
@@ -614,23 +686,9 @@ function renderSearchResults() {
       <div class="search-result-name">${result.filename}</div>
       <div class="search-result-meta">Task: ${result.task_id}</div>
     `;
-    item.onclick = () => previewSearchResult(result, item);
+    item.onclick = () => openPreviewModal(result);
     container.appendChild(item);
   });
-}
-
-function previewSearchResult(result, element) {
-  const preview = document.getElementById("filePreview");
-  if (!preview) return;
-
-  preview.innerHTML = `
-    <div style="text-align:center;padding:20px;">
-      <div style="font-size:48px;margin-bottom:10px;">📄</div>
-      <div style="font-weight:bold;">${result.filename}</div>
-      <div style="color:var(--muted);font-size:12px;margin-top:10px;">Task: ${result.task_id}</div>
-      <button class="btn btn-primary" style="margin-top:15px;" onclick="downloadFile('${result.path}')">⬇️ Download</button>
-    </div>
-  `;
 }
 
 // ======================
@@ -679,7 +737,9 @@ window.runAction = runAction;
 window.setSearchMode = setSearchMode;
 window.performSearch = performSearch;
 window.downloadFile = downloadFile;
-window.previewFile = previewFile;
+window.openPreviewModal = openPreviewModal;
+window.closePreviewModal = closePreviewModal;
+window.downloadCurrentFile = downloadCurrentFile;
 window.saveProfile = saveProfile;
 window.toggleTaskSelection = toggleTaskSelection;
 window.setFileAgentFilter = setFileAgentFilter;
