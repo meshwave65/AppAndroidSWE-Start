@@ -2,204 +2,272 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#0e141d">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0f19">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   
   <title>Sofia Web Extractor</title>
 
-  <style>
-    :root {
-      --bg: #0a0f19;
-      --card: #0e141d;
-      --accent: #4ea1ff;
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: #cfd6e4;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
-
-    nav {
-      background: #0e141d;
-      padding: 12px 15px;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      border-bottom: 1px solid #1f2a3a;
-    }
-
-    .nav-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-
-    .tabs-buttons {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      justify-content: center;
-    }
-
-    .tabs-buttons button {
-      padding: 11px 14px;
-      font-size: 15px;
-      background: #1a2433;
-      color: #cfd6e4;
-      border: none;
-      border-radius: 10px;
-    }
-
-    .user-bar {
-      text-align: center;
-      margin-top: 10px;
-      font-size: 15.5px;
-    }
-
-    .tab {
-      display: none;
-      padding: 15px 15px 100px;
-    }
-
-    .tab.active { display: block; }
-
-    input, select, textarea, button {
-      width: 100%;
-      padding: 14px 16px;
-      margin: 10px 0;
-      background: #1a2433;
-      border: 1px solid #263447;
-      border-radius: 10px;
-      color: white;
-      font-size: 16px;
-    }
-
-    button {
-      background: var(--accent);
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    h2 { margin: 20px 0 15px 0; }
-  </style>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/favicon.svg">
 </head>
 
 <body>
 
-<nav>
-  <div class="nav-header">
-    <h1 style="font-size: 19px; margin:0;">Sofia Extractor</h1>
-  </div>
-
-  <div class="tabs-buttons">
-    <button onclick="showTab(1)">🔑 Auth</button>
-    <button onclick="showTab(2)">➕ Insert</button>
-    <button onclick="showTab(3)">📋 Tasks</button>
-    <button onclick="showTab(4)">📁 Files</button>
-    <button onclick="showTab(5)">🔍 Search</button>
-    <button onclick="showTab(6)">👤 Profile</button>
-  </div>
-
-  <div class="user-bar">
-    <span style="opacity:0.7;">Usuário:</span>
-    <b id="navUserName">Carregando...</b>
-  </div>
-</nav>
-
-<!-- ================= AUTH ================= -->
-<div class="tab" id="tab1">
-  <div style="max-width:400px;margin:100px auto;background:#0e141d;padding:30px;border-radius:12px;border:1px solid #1f2a3a;">
-    <h2 style="text-align:center;margin-top:0;">Acesso ao Sistema</h2>
-
-    <label>User / Email</label>
-    <input id="login_email" placeholder="user_name ou email">
-
-    <label>Password</label>
-    <input id="login_pass" type="password" placeholder="Sua senha">
-
-    <div style="display:flex;gap:10px;margin-top:20px;">
-      <button onclick="login()" style="flex:1;">Login</button>
-      <button onclick="showTab(7)" style="flex:1;background:#1a2433;color:#4ea1ff;border:1px solid #4ea1ff;">
-        Create Account
-      </button>
+<!-- ================= HEADER ================= -->
+<header class="app-header">
+  <div class="header-content">
+    <h1 class="app-title">Sofia Extractor</h1>
+    <div class="user-display">
+      <span id="headerUserName">Guest</span>
     </div>
   </div>
-</div>
+</header>
 
-<!-- ================= INSERT ================= -->
-<div class="tab" id="tab2">
-  <div style="max-width:600px;margin:50px auto;background:#0e141d;padding:30px;border-radius:12px;border:1px solid #1f2a3a;">
-    <h2>Nova Extração</h2>
+<!-- ================= MAIN CONTENT ================= -->
+<main class="app-main">
 
-    <label>Agente Executor</label>
-    <select id="insert_agent">
-      <option value="meshwave65">MeshWave Default</option>
-    </select>
+  <!-- ================= AUTH TAB ================= -->
+  <div class="tab" id="tab1" data-tab="auth">
+    <div class="tab-content">
+      <div class="card card-auth">
+        <h2>Acesso ao Sistema</h2>
+        
+        <div class="form-group">
+          <label for="login_email">Usuário ou Email</label>
+          <input id="login_email" type="text" placeholder="seu_usuario ou seu@email.com">
+        </div>
 
-    <label>Agent Override</label>
-    <input id="agent_override" placeholder="ex: custom_agent_v2">
+        <div class="form-group">
+          <label for="login_pass">Senha</label>
+          <input id="login_pass" type="password" placeholder="Sua senha">
+        </div>
 
-    <label>URLs</label>
-    <textarea id="task_url" placeholder="https://..."></textarea>
+        <div class="button-group">
+          <button class="btn btn-primary" onclick="login()">🔓 Login</button>
+          <button class="btn btn-secondary" onclick="showTab(7)">➕ Criar Conta</button>
+        </div>
 
-    <button onclick="insertTask()">Iniciar Processo</button>
+        <div id="auth_msg" class="message"></div>
+      </div>
+    </div>
   </div>
-</div>
 
-<!-- ================= TASKS ================= -->
-<div class="tab" id="tab3">
-  <h2>Gerenciador de Tarefas</h2>
-  <div id="tasks"></div>
-</div>
+  <!-- ================= INSERT TAB ================= -->
+  <div class="tab" id="tab2" data-tab="insert">
+    <div class="tab-content">
+      <div class="card">
+        <h2>Nova Extração</h2>
 
-<!-- ================= FILES ================= -->
-<div class="tab" id="tab4">
-  <h2>Arquivos</h2>
-  <div id="files"></div>
-</div>
+        <div class="form-group">
+          <label for="insert_agent">Agente Executor</label>
+          <select id="insert_agent">
+            <option value="meshwave65">MeshWave Default</option>
+          </select>
+        </div>
 
-<!-- ================= SEARCH ================= -->
-<div class="tab" id="tab5">
-  <h2>Busca</h2>
-  <input id="searchInput" placeholder="Pesquisar...">
-  <button onclick="performSearch()">Pesquisar</button>
+        <div class="form-group">
+          <label for="agent_override">Agent Override (Opcional)</label>
+          <input id="agent_override" type="text" placeholder="ex: custom_agent_v2">
+        </div>
 
-  <div id="searchResults"></div>
-</div>
+        <div class="form-group">
+          <label for="task_url">URLs para Extração</label>
+          <textarea id="task_url" placeholder="https://exemplo.com/pagina-1&#10;https://exemplo.com/pagina-2" rows="5"></textarea>
+        </div>
 
-<!-- ================= PROFILE ================= -->
-<div class="tab" id="tab6">
-  <h2>Profile</h2>
+        <div class="file-upload-section">
+          <input type="file" id="file_upload" style="display:none" accept=".txt,.csv" onchange="handleFileUpload(event)">
+          <button class="btn btn-secondary" onclick="document.getElementById('file_upload').click()">📁 Upload de Lista</button>
+          <span class="upload-hint">ou cole os links acima</span>
+        </div>
 
-  <div class="user-bar">
-    <span style="opacity:0.7;">Usuário:</span>
-    <b id="navUserNameProfile">Guest</b>
+        <button class="btn btn-primary btn-block" onclick="insertTask()">🚀 Iniciar Processo</button>
+      </div>
+    </div>
   </div>
-</div>
 
-<script>
-  function syncUserName() {
-    const name =
-      window.USER?.full_name ||
-      window.USER?.user_name ||
-      "Guest";
+  <!-- ================= TASKS TAB ================= -->
+  <div class="tab" id="tab3" data-tab="tasks">
+    <div class="tab-content">
+      <h2>Gerenciador de Tarefas</h2>
 
-    const el1 = document.getElementById("navUserName");
-    const el2 = document.getElementById("navUserNameProfile");
+      <div class="task-toolbar">
+        <button class="btn-icon" onclick="smartRefresh()" title="Atualizar">⟳</button>
+        <button class="btn-icon" onclick="runAction('PLAY')" title="Executar">▶</button>
+        <button class="btn-icon" onclick="runAction('PAUSE')" title="Pausar">⏸</button>
+        <button class="btn-icon" onclick="runAction('STOP')" title="Parar">■</button>
+        <button class="btn-icon" onclick="runAction('DELETE')" title="Deletar">🗑</button>
+      </div>
 
-    if (el1) el1.textContent = name;
-    if (el2) el2.textContent = name;
-  }
+      <div class="filters-section">
+        <select id="filter_agent" onchange="loadTasks()">
+          <option value="ALL">Todos os Agentes</option>
+        </select>
+        <select id="filter_llm" onchange="loadTasks()">
+          <option value="ALL">Todos os LLM</option>
+        </select>
+        <select id="filter_status" onchange="loadTasks()">
+          <option value="ALL">Todos os Status</option>
+          <option value="STAGED">STAGED</option>
+          <option value="PROCESS">PROCESS</option>
+          <option value="DONE">DONE</option>
+          <option value="FAIL">FAIL</option>
+        </select>
+      </div>
 
-  syncUserName();
+      <div id="tasks" class="tasks-list"></div>
+    </div>
+  </div>
 
-  setInterval(syncUserName, 500);
-</script>
+  <!-- ================= FILES TAB ================= -->
+  <div class="tab" id="tab4" data-tab="files">
+    <div class="tab-content">
+      <h2>Explorador de Arquivos</h2>
+
+      <div class="filters-section">
+        <select id="file_filter_agent" onchange="setFileAgentFilter(this.value)">
+          <option value="ALL">Todos os Agentes</option>
+        </select>
+        <select id="file_filter_llm" onchange="setFileLLMFilter(this.value)">
+          <option value="ALL">Todos os LLM</option>
+        </select>
+        <input id="file_filter_slug" type="text" placeholder="Buscar arquivo..." oninput="setFileSlugFilter(this.value)">
+      </div>
+
+      <div id="files" class="files-list"></div>
+      <div id="filePreview" class="file-preview"></div>
+    </div>
+  </div>
+
+  <!-- ================= SEARCH TAB ================= -->
+  <div class="tab" id="tab5" data-tab="search">
+    <div class="tab-content">
+      <h2>Busca Inteligente</h2>
+
+      <div class="search-modes">
+        <button class="btn-mode active" id="modeDefault" onclick="setSearchMode('DEFAULT')">PADRÃO</button>
+        <button class="btn-mode" id="modeResumo" onclick="setSearchMode('RESUMO')">RESUMO</button>
+        <button class="btn-mode" id="modeEnrich" onclick="setSearchMode('ENRICH')">ENRICH</button>
+      </div>
+
+      <div class="form-group">
+        <input id="searchInput" type="text" placeholder="O que você procura?">
+        <button class="btn btn-primary btn-block" onclick="performSearch()">🔍 Pesquisar</button>
+      </div>
+
+      <div id="searchResults" class="search-results"></div>
+    </div>
+  </div>
+
+  <!-- ================= PROFILE TAB ================= -->
+  <div class="tab" id="tab6" data-tab="profile">
+    <div class="tab-content">
+      <div class="card">
+        <h2>Meu Perfil</h2>
+
+        <div class="form-group">
+          <label for="p_username">Nome de Usuário</label>
+          <input id="p_username" type="text" disabled>
+        </div>
+
+        <div class="form-group">
+          <label for="p_name">Nome Completo</label>
+          <input id="p_name" type="text" placeholder="Seu nome">
+        </div>
+
+        <div class="form-group">
+          <label for="p_email">E-mail</label>
+          <input id="p_email" type="email" placeholder="seu@email.com">
+        </div>
+
+        <div class="form-group">
+          <label for="p_tel">Telefone</label>
+          <input id="p_tel" type="tel" placeholder="(00) 00000-0000">
+        </div>
+
+        <div class="form-group">
+          <label for="p_company">Empresa</label>
+          <input id="p_company" type="text" placeholder="Nome da empresa">
+        </div>
+
+        <div class="form-group">
+          <label for="p_role">Cargo</label>
+          <input id="p_role" type="text" placeholder="Seu cargo">
+        </div>
+
+        <div class="form-group">
+          <label for="p_pass">Alterar Senha</label>
+          <input id="p_pass" type="password" placeholder="Deixe em branco para não alterar">
+        </div>
+
+        <button class="btn btn-primary btn-block" onclick="saveProfile()">💾 Salvar Alterações</button>
+        <div id="profile_msg" class="message"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= REGISTER TAB ================= -->
+  <div class="tab" id="tab7" data-tab="register">
+    <div class="tab-content">
+      <div class="card card-auth">
+        <h2>Criar Nova Conta</h2>
+
+        <div class="form-group">
+          <label for="reg_fullname">Nome Completo *</label>
+          <input id="reg_fullname" type="text" placeholder="Seu nome">
+        </div>
+
+        <div class="form-group">
+          <label for="reg_email">E-mail *</label>
+          <input id="reg_email" type="email" placeholder="seu@email.com">
+        </div>
+
+        <div class="form-group">
+          <label for="reg_username">Username (Opcional)</label>
+          <input id="reg_username" type="text" placeholder="usuario_desejado">
+        </div>
+
+        <div class="form-group">
+          <label for="reg_code">Código de Convite *</label>
+          <input id="reg_code" type="text" placeholder="Código obrigatório">
+        </div>
+
+        <div class="form-group">
+          <label for="reg_pass">Senha *</label>
+          <input id="reg_pass" type="password" placeholder="Mínimo 6 caracteres">
+        </div>
+
+        <div class="form-group">
+          <label for="reg_pass2">Confirmar Senha *</label>
+          <input id="reg_pass2" type="password" placeholder="Repita a senha">
+        </div>
+
+        <div class="button-group">
+          <button class="btn btn-primary" onclick="registerUser()">✓ Finalizar Cadastro</button>
+          <button class="btn btn-secondary" onclick="showTab(1)">← Voltar</button>
+        </div>
+
+        <div id="reg_msg" class="message"></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ================= BOTTOM NAVIGATION ================= -->
+<nav class="bottom-nav">
+  <button class="nav-btn" onclick="showTab(1)" title="Auth">🔑</button>
+  <button class="nav-btn" onclick="showTab(2)" title="Insert">➕</button>
+  <button class="nav-btn" onclick="showTab(3)" title="Tasks">📋</button>
+  <button class="nav-btn" onclick="showTab(4)" title="Files">📁</button>
+  <button class="nav-btn" onclick="showTab(5)" title="Search">🔍</button>
+  <button class="nav-btn" onclick="showTab(6)" title="Profile">👤</button>
+</nav>
+
+<!-- ================= TOAST NOTIFICATIONS ================= -->
+<div id="toast" class="toast"></div>
 
 <script type="module" src="/src/main.js"></script>
 

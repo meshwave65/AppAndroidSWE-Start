@@ -1,6 +1,7 @@
 {
   "name": "appandroidswe",
-  "version": "0.0.0",
+  "version": "2.0.0",
+  "description": "Sofia Web Extractor - Mobile First Version",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,5 +11,9 @@
   },
   "devDependencies": {
     "vite": "^8.0.12"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "mammoth": "^1.6.0"
   }
 }
