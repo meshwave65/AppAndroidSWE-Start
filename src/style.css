@@ -1,0 +1,88 @@
+<style>
+    :root {
+      --bg: #0a0f19;
+      --card: #0e141d;
+      --accent: #4ea1ff;
+    }
+    
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: #cfd6e4;
+      font-family: system-ui, -apple-system, sans-serif;
+      padding-bottom: 70px; /* espaço para bottom bar futura */
+    }
+
+    nav {
+      background: #0e141d;
+      padding: 12px 15px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid #1f2a3a;
+    }
+
+    .nav-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .tabs-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .tabs-buttons button {
+      padding: 10px 14px;
+      font-size: 14.5px;
+      background: #1a2433;
+      color: #cfd6e4;
+      border: none;
+      border-radius: 10px;
+      white-space: nowrap;
+    }
+
+    .user-bar {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 15px;
+    }
+
+    .tab {
+      display: none;
+      padding: 15px 15px 100px;
+    }
+    .tab.active { display: block; }
+
+    /* Melhorias para Mobile */
+    input, select, textarea, button {
+      width: 100%;
+      padding: 14px 16px;
+      margin: 10px 0;
+      background: #1a2433;
+      border: 1px solid #263447;
+      border-radius: 10px;
+      color: white;
+      font-size: 16px; /* importante para não dar zoom no iOS */
+    }
+
+    button {
+      background: var(--accent);
+      font-weight: bold;
+      cursor: pointer;
+      min-height: 48px;
+    }
+
+    h2 { margin: 20px 0 15px 0; }
+
+    /* Ajuste em containers com max-width */
+    .tab > div[style*="max-width"] {
+      max-width: 100% !important;
+      margin: 0 !important;
+    }
+</style>
