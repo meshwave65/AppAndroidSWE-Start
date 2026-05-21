@@ -590,8 +590,9 @@ function renderFileTree() {
       const taskHeader = document.createElement("div");
       taskHeader.className = "collapsible-header collapsed";
       taskHeader.style.marginLeft = "15px";
+      const taskId = task.id || task.task_id || task.slug || "unknown";
       taskHeader.innerHTML = `
-        <div>📋 Task: ${task.id}</div>
+        <div>📋 Task: ${taskId}</div>
         <span class="toggle-icon">▼</span>
       `;
       providerContent.appendChild(taskHeader);
@@ -605,7 +606,8 @@ function renderFileTree() {
       (task.files || []).forEach(file => {
         const fileItem = document.createElement("div");
         fileItem.className = "file-item file-item-nested";
-        fileItem.innerHTML = `📄 ${file.filename.split("_").pop()}`;
+        const displayName = file.filename ? file.filename.split("_").pop() : "arquivo";
+        fileItem.innerHTML = `📄 ${displayName}`;
         fileItem.onclick = () => openPreviewModal(file);
         taskContent.appendChild(fileItem);
       });
