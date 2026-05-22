@@ -159,14 +159,16 @@ function openPreviewModal(file) {
   
   if (!modal || !title || !body) return;
   
-  title.textContent = file.filename;
+  // Extrair apenas o nome.extensão do arquivo
+  const cleanFilename = file.filename ? file.filename.split("_").pop() : "arquivo";
+  title.textContent = cleanFilename;
   body.innerHTML = "Carregando...";
   
-  const ext = file.filename.split(".").pop().toLowerCase();
+  const ext = cleanFilename.split(".").pop().toLowerCase();
   const fileUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(file.path)}&download=false`;
   
   if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) {
-    body.innerHTML = `<img src="${fileUrl}" class="preview-image" alt="${file.filename}">`;
+    body.innerHTML = `<img src="${fileUrl}" class="preview-image" alt="${cleanFilename}">`;
   } else if (ext === "pdf") {
     body.innerHTML = `<iframe src="${fileUrl}" style="width:100%;height:500px;border:none;border-radius:8px;"></iframe>`;
   } else if (["txt", "md", "json", "log", "csv"].includes(ext)) {
