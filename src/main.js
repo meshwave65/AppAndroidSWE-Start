@@ -162,10 +162,19 @@ function openPreviewModal(file) {
   // Extrair apenas o nome.extensão do arquivo
   const cleanFilename = file.filename ? file.filename.split("_").pop() : "arquivo";
   title.textContent = cleanFilename;
-  body.innerHTML = "Carregando...";
+  body.innerHTML = "Loading...";
   
   const ext = cleanFilename.split(".").pop().toLowerCase();
-  const fileUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(file.path)}&download=false`;
+  
+  // Chaveamento dinâmico de storage: usar o storage do usuário se configurado
+  let fileUrl;
+  if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
+    // Usar o storage do usuário
+    fileUrl = `${USER_CONFIG.storage.url}/storage/v1/object/public/sofia_storage_user/${file.path}`;
+  } else {
+    // Usar a API central (fallback)
+    fileUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(file.path)}&download=false`;
+  }
   
   if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) {
     body.innerHTML = `<img src="${fileUrl}" class="preview-image" alt="${cleanFilename}">`;
@@ -175,14 +184,14 @@ function openPreviewModal(file) {
     fetch(fileUrl)
       .then(res => res.text())
       .then(text => {
-        const preview = text.length > 5000 ? text.substring(0, 5000) + "\n\n[... arquivo truncado ...]" : text;
+        const preview = text.length > 5000 ? text.substring(0, 5000) + "\n\n[... file truncated ...]": text;
         body.innerHTML = `<div class="preview-text">${preview}</div>`;
       })
       .catch(() => {
-        body.innerHTML = "<div class='preview-text'>Erro ao carregar arquivo</div>";
+        body.innerHTML = "<div class='preview-text'>Error loading file</div>";
       });
   } else {
-    body.innerHTML = "<div class='preview-text'>Formato não suportado para preview</div>";
+    body.innerHTML = "<div class='preview-text'>Format not supported for preview</div>";
   }
   
   modal.classList.add("active");
@@ -634,7 +643,15 @@ function renderFileTree() {
 }
 
 function downloadFile(path) {
-  window.open(`${API_BASE_URL}/api/file?path=${encodeURIComponent(path)}&download=true`, "_blank");
+  let downloadUrl;
+  if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
+    // Usar o storage do usuário
+    downloadUrl = `${USER_CONFIG.storage.url}/storage/v1/object/public/sofia_storage_user/${path}`;
+  } else {
+    // Usar a API central (fallback)
+    downloadUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(path)}&download=true`;
+  }
+  window.open(downloadUrl, "_blank");
 }
 
 // ======================
@@ -803,6 +820,71 @@ async function saveConfigToSupabase() {
   }
 }
 
+
+async function testDatabaseConnection() {
+  const host = document.getElementById("db_host").value.trim();
+  const port = parseInt(document.getElementById("db_port").value) || 5432;
+  const name = document.getElementById("db_name").value.trim();
+  const user = document.getElementById("db_user").value.trim();
+  const pass = document.getElementById("db_pass").value;
+
+  if (!host || !user || !pass) {
+    showMessage("db_msg", "Please fill in all database fields first", "error");
+    return;
+  }
+
+  showMessage("db_msg", "Testing connection...", "info");
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/test-db`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        host,
+        port,
+        database: name || "sofia_storage_user",
+        user,
+        password: pass
+      })
+    });
+
+    const result = await response.json();
+    if (result.success) {
+      showMessage("db_msg", "✅ Database connection successful!", "success");
+    } else {
+      showMessage("db_msg", `❌ Connection failed: ${result.error || "Unknown error"}`, "error");
+    }
+  } catch (error) {
+    showMessage("db_msg", `❌ Connection error: ${error.message}`, "error");
+  }
+}
+
+async function testStorageConnection() {
+  const url = document.getElementById("storage_url").value.trim();
+  const key = document.getElementById("storage_key").value.trim();
+
+  if (!url || !key) {
+    showMessage("storage_msg", "Please fill in all storage fields first", "error");
+    return;
+  }
+
+  showMessage("storage_msg", "Testing connection...", "info");
+
+  try {
+    const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2");
+    const testClient = createClient(url, key);
+    const { data, error } = await testClient.storage.from("sofia_storage_user").list("", { limit: 1 });
+    
+    if (error) {
+      showMessage("storage_msg", `❌ Connection failed: ${error.message}`, "error");
+    } else {
+      showMessage("storage_msg", "✅ Storage connection successful!", "success");
+    }
+  } catch (error) {
+    showMessage("storage_msg", `❌ Connection error: ${error.message}`, "error");
+  }
+}
+
 // ======================
 // PROFILE
 // ======================
@@ -855,6 +937,8 @@ window.downloadCurrentFile = downloadCurrentFile;
 window.saveProfile = saveProfile;
 window.saveDBConfig = saveDBConfig;
 window.saveStorageConfig = saveStorageConfig;
+window.testDatabaseConnection = testDatabaseConnection;
+window.testStorageConnection = testStorageConnection;
 window.toggleTaskSelection = toggleTaskSelection;
 window.setFileAgentFilter = setFileAgentFilter;
 window.setFileLLMFilter = setFileLLMFilter;

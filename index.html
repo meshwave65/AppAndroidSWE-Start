@@ -253,7 +253,10 @@
             <input id="db_pass" type="password" placeholder="Your database password">
           </div>
 
-          <button type="submit" class="btn btn-primary btn-block">💾 Save Database Config</button>
+          <div class="button-group">
+            <button type="submit" class="btn btn-primary" style="flex: 2;">💾 Save</button>
+            <button type="button" class="btn btn-secondary" onclick="testDatabaseConnection()" style="flex: 1;">🔗 Test</button>
+          </div>
         </form>
         <div id="db_msg" class="message"></div>
       </div>
@@ -279,7 +282,10 @@
             <input id="storage_key" type="password" placeholder="Your Supabase anon key">
           </div>
 
-          <button type="submit" class="btn btn-primary btn-block">💾 Save Storage Config</button>
+          <div class="button-group">
+            <button type="submit" class="btn btn-primary" style="flex: 2;">💾 Save</button>
+            <button type="button" class="btn btn-secondary" onclick="testStorageConnection()" style="flex: 1;">🔗 Test</button>
+          </div>
         </form>
         <div id="storage_msg" class="message"></div>
       </div>
