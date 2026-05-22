@@ -778,13 +778,21 @@ async function saveDBConfig() {
 }
 
 async function saveStorageConfig() {
+  let url = document.getElementById("storage_url").value.trim();
+  const key = document.getElementById("storage_key").value.trim();
+
+  // Normalizar URL: adicionar https:// se não tiver
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = "https://" + url;
+  }
+
   const config = {
-    url: document.getElementById("storage_url").value.trim(),
-    key: document.getElementById("storage_key").value.trim()
+    url: url,
+    key: key
   };
 
   if (!config.url || !config.key) {
-    showMessage("storage_msg", "Please fill in all storage fields", "error");
+    showMessage("storage_msg", "Please fill in all storage fields first", "error");
     return;
   }
 
@@ -860,8 +868,13 @@ async function testDatabaseConnection() {
 }
 
 async function testStorageConnection() {
-  const url = document.getElementById("storage_url").value.trim();
+  let url = document.getElementById("storage_url").value.trim();
   const key = document.getElementById("storage_key").value.trim();
+
+  // Normalizar URL: adicionar https:// se não tiver
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = "https://" + url;
+  }
 
   if (!url || !key) {
     showMessage("storage_msg", "Please fill in all storage fields first", "error");
