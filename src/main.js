@@ -452,6 +452,28 @@ function toggleTaskSelection(id, cb) {
   else TASK_SELECTION.delete(id);
 }
 
+async function ensureOriginProviderInUserDB(user_uuid, origin_provider) {
+  if (!user_uuid || !origin_provider) return;
+  const { data: existing } = await supabase
+    .from("user_origin_providers")
+    .select("id")
+    .eq("user_uuid", user_uuid)
+    .eq("origin_provider", origin_provider)
+    .maybeSingle();
+  if (existing) return existing;
+  const { data, error } = await supabase
+    .from("user_origin_providers")
+    .insert([{
+      user_uuid,
+      client_uuid: MESH_WAVE_UUID,
+      origin_provider
+    }])
+    .select()
+    .maybeSingle();
+  if (error) console.error("Error ensuring origin provider:", error);
+  return data;
+}
+
 async function insertTask() {
   const rawValue = document.getElementById("task_url").value.trim();
   if (!rawValue) { showToast("URL(s) obrigatória(s)", "error"); return; }
@@ -473,9 +495,14 @@ async function insertTask() {
   const { error } = await supabase.from("appsofia_tasks").insert(payloads);
   if (error) showToast("Erro ao inserir tarefa", "error");
   else {
-    showToast(`${urls.length} tarefa(s) inserida(s) com sucesso!`, "success");
+    // Sincronizar origin_providers
+    for (const payload of payloads) {
+      await ensureOriginProviderInUserDB(USER.id, payload.origin_provider);
+    }
+    showToast(`${urls.length} tarefa(s) inserida(s) com sucesso!", "success");
     document.getElementById("task_url").value = "";
     loadTasks();
+    await loadAgentsAndLLMs();
   }
 }
 
@@ -851,6 +878,77 @@ async function saveConfigToSupabase() {
   }
 }
 
+async function migrateTasksToUserDB() {
+  if (!USER_CONFIG.database) {
+    showToast("Configure o banco de dados primeiro", "error");
+    return;
+  }
+  
+  showMessage("migration_msg", "Iniciando migração...", "info");
+  const statusEl = document.getElementById("migration_status");
+  if (statusEl) statusEl.textContent = "Processando...";
+  
+  try {
+    // Buscar todas as tarefas do usuário no banco central
+    const { data: tasks, error: tasksError } = await supabase
+      .from("appsofia_tasks")
+      .select("*")
+      .eq("session_user_id", USER.id);
+    
+    if (tasksError || !tasks) {
+      showMessage("migration_msg", "Erro ao buscar tarefas", "error");
+      if (statusEl) statusEl.textContent = "Erro na última migração";
+      return;
+    }
+    
+    // Sincronizar cada tarefa e seu origin_provider
+    let migratedCount = 0;
+    for (const task of tasks) {
+      // Sincronizar origin_provider
+      if (task.origin_provider) {
+        await ensureOriginProviderInUserDB(USER.id, task.origin_provider);
+      }
+      migratedCount++;
+    }
+    
+    // Atualizar status
+    const migrationData = {
+      last_migration: new Date().toISOString(),
+      tasks_migrated: migratedCount,
+      status: "completed"
+    };
+    
+    USER_CONFIG.migration_status = migrationData;
+    
+    const { error: updateError } = await supabase
+      .from("user_configurations")
+      .update({
+        config: USER_CONFIG,
+        updated_at: new Date()
+      })
+      .eq("user_id", USER.id);
+    
+    if (updateError) {
+      showMessage("migration_msg", "Erro ao atualizar status", "error");
+      if (statusEl) statusEl.textContent = "Erro ao salvar status";
+      return;
+    }
+    
+    if (statusEl) {
+      const lastMigration = new Date(migrationData.last_migration).toLocaleString('pt-BR');
+      statusEl.textContent = `✅ Última migração: ${lastMigration} | ${migratedCount} tarefa(s)`;
+    }
+    
+    showMessage("migration_msg", `✅ Migração concluída! ${migratedCount} tarefa(s) sincronizada(s).`, "success");
+    await loadAgentsAndLLMs();
+    updateConfigStatus();
+  } catch (error) {
+    console.error("Migration error:", error);
+    showMessage("migration_msg", `❌ Erro na migração: ${error.message}`, "error");
+    if (statusEl) statusEl.textContent = `Erro: ${error.message}`;
+  }
+}
+
 
 async function testDatabaseConnection() {
   const uri = document.getElementById("db_uri").value.trim();
@@ -987,6 +1085,8 @@ window.toggleTaskSelection = toggleTaskSelection;
 window.setFileAgentFilter = setFileAgentFilter;
 window.setFileLLMFilter = setFileLLMFilter;
 window.setFileSlugFilter = setFileSlugFilter;
+window.migrateTasksToUserDB = migrateTasksToUserDB;
+window.ensureOriginProviderInUserDB = ensureOriginProviderInUserDB;
 
 // ======================
 // INITIALIZATION
