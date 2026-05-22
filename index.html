@@ -225,32 +225,18 @@
       <!-- ================= DATABASE CONFIGURATION SECTION ================= -->
       <div class="card">
         <h2>🗄️ Database Configuration</h2>
-        <p style="font-size: 12px; color: var(--muted); margin-bottom: 15px;">Configure your personal PostgreSQL database for data storage</p>
+        <p style="font-size: 12px; color: var(--muted); margin-bottom: 15px;">Paste your Supabase Connection String (URI)</p>
 
         <form onsubmit="event.preventDefault(); saveDBConfig();">
           <div class="form-group">
-            <label for="db_host">Database Host</label>
-            <input id="db_host" type="text" placeholder="localhost or your-db.example.com">
+            <label for="db_uri">Connection String (URI)</label>
+            <textarea id="db_uri" placeholder="postgresql://postgres.[your-project-id]:[YOUR-PASSWORD]@aws-0-[region].pooler.supabase.com:5432/postgres" rows="3"></textarea>
           </div>
 
           <div class="form-group">
-            <label for="db_port">Port</label>
-            <input id="db_port" type="number" placeholder="5432" value="5432">
-          </div>
-
-          <div class="form-group">
-            <label for="db_name">Database Name</label>
-            <input id="db_name" type="text" placeholder="sofia_storage_user">
-          </div>
-
-          <div class="form-group">
-            <label for="db_user">Username</label>
-            <input id="db_user" type="text" placeholder="postgres">
-          </div>
-
-          <div class="form-group">
-            <label for="db_pass">Password</label>
-            <input id="db_pass" type="password" placeholder="Your database password">
+            <label for="db_pass">Database Password</label>
+            <input id="db_pass" type="password" placeholder="Your Supabase database password">
+            <span class="upload-hint">This will replace [YOUR-PASSWORD] in the URI above</span>
           </div>
 
           <div class="button-group">

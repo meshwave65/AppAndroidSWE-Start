@@ -737,14 +737,11 @@ async function loadUserConfig() {
 
 function populateConfigFields() {
   if (USER_CONFIG.database) {
-    document.getElementById("db_host").value = USER_CONFIG.database.host || "";
-    document.getElementById("db_port").value = USER_CONFIG.database.port || "5432";
-    document.getElementById("db_name").value = USER_CONFIG.database.name || "";
-    document.getElementById("db_user").value = USER_CONFIG.database.user || "";
+    if (document.getElementById("db_uri")) document.getElementById("db_uri").value = USER_CONFIG.database.uri || "";
   }
   if (USER_CONFIG.storage) {
-    document.getElementById("storage_url").value = USER_CONFIG.storage.url || "";
-    document.getElementById("storage_key").value = USER_CONFIG.storage.key || "";
+    if (document.getElementById("storage_url")) document.getElementById("storage_url").value = USER_CONFIG.storage.url || "";
+    if (document.getElementById("storage_key")) document.getElementById("storage_key").value = USER_CONFIG.storage.key || "";
   }
 }
 
@@ -757,21 +754,42 @@ function updateConfigStatus() {
   }
 }
 
-async function saveDBConfig() {
-  const config = {
-    host: document.getElementById("db_host").value.trim(),
-    port: parseInt(document.getElementById("db_port").value) || 5432,
-    name: document.getElementById("db_name").value.trim() || "sofia_storage_user",
-    user: document.getElementById("db_user").value.trim(),
-    pass: document.getElementById("db_pass").value
-  };
+function parseDatabaseURI(uri, password) {
+  try {
+    // Substituir placeholder de senha se existir
+    const finalUri = uri.replace("[YOUR-PASSWORD]", encodeURIComponent(password));
+    const url = new URL(finalUri);
+    
+    return {
+      uri: uri, // Salvar a original com placeholder
+      host: url.hostname,
+      port: parseInt(url.port) || 5432,
+      name: url.pathname.substring(1),
+      user: url.username,
+      pass: password || url.password
+    };
+  } catch (e) {
+    console.error("Error parsing URI:", e);
+    return null;
+  }
+}
 
-  if (!config.host || !config.user || !config.pass) {
-    showMessage("db_msg", "Please fill in all database fields", "error");
+async function saveDBConfig() {
+  const uri = document.getElementById("db_uri").value.trim();
+  const pass = document.getElementById("db_pass").value;
+
+  if (!uri) {
+    showMessage("db_msg", "Please paste your Connection String (URI)", "error");
     return;
   }
 
-  USER_CONFIG.database = config;
+  const parsed = parseDatabaseURI(uri, pass);
+  if (!parsed) {
+    showMessage("db_msg", "Invalid Connection String format", "error");
+    return;
+  }
+
+  USER_CONFIG.database = parsed;
   await saveConfigToSupabase();
   showMessage("db_msg", "Database configuration saved successfully!", "success");
   updateConfigStatus();
@@ -835,14 +853,17 @@ async function saveConfigToSupabase() {
 
 
 async function testDatabaseConnection() {
-  const host = document.getElementById("db_host").value.trim();
-  const port = parseInt(document.getElementById("db_port").value) || 5432;
-  const name = document.getElementById("db_name").value.trim();
-  const user = document.getElementById("db_user").value.trim();
+  const uri = document.getElementById("db_uri").value.trim();
   const pass = document.getElementById("db_pass").value;
 
-  if (!host || !user || !pass) {
-    showMessage("db_msg", "Please fill in all database fields first", "error");
+  if (!uri) {
+    showMessage("db_msg", "Please paste your Connection String (URI) first", "error");
+    return;
+  }
+
+  const config = parseDatabaseURI(uri, pass);
+  if (!config) {
+    showMessage("db_msg", "Invalid Connection String format", "error");
     return;
   }
 
@@ -853,11 +874,11 @@ async function testDatabaseConnection() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        host,
-        port,
-        database: name || "sofia_storage_user",
-        user,
-        password: pass
+        host: config.host,
+        port: config.port,
+        database: config.name,
+        user: config.user,
+        password: config.pass
       })
     });
 
