@@ -696,6 +696,114 @@ function renderSearchResults() {
 }
 
 // ======================
+// SETTINGS & CONFIGURATION
+// ======================
+let USER_CONFIG = {
+  database: null,
+  storage: null
+};
+
+async function loadUserConfig() {
+  if (!SESSION.logged) return;
+  const { data, error } = await supabase
+    .from("user_configurations")
+    .select("*")
+    .eq("user_id", USER.id)
+    .maybeSingle();
+  
+  if (data) {
+    USER_CONFIG = data.config || USER_CONFIG;
+    populateConfigFields();
+    updateConfigStatus();
+  }
+}
+
+function populateConfigFields() {
+  if (USER_CONFIG.database) {
+    document.getElementById("db_host").value = USER_CONFIG.database.host || "";
+    document.getElementById("db_port").value = USER_CONFIG.database.port || "5432";
+    document.getElementById("db_name").value = USER_CONFIG.database.name || "";
+    document.getElementById("db_user").value = USER_CONFIG.database.user || "";
+  }
+  if (USER_CONFIG.storage) {
+    document.getElementById("storage_url").value = USER_CONFIG.storage.url || "";
+    document.getElementById("storage_key").value = USER_CONFIG.storage.key || "";
+  }
+}
+
+function updateConfigStatus() {
+  const dbStatus = USER_CONFIG.database ? "🟢 Database: Configured" : "🔴 Database: Not configured";
+  const storageStatus = USER_CONFIG.storage ? "🟢 Storage: Configured" : "🔴 Storage: Not configured";
+  const statusDiv = document.getElementById("config_status");
+  if (statusDiv) {
+    statusDiv.innerHTML = `<p>${dbStatus}</p><p>${storageStatus}</p>`;
+  }
+}
+
+async function saveDBConfig() {
+  const config = {
+    host: document.getElementById("db_host").value.trim(),
+    port: parseInt(document.getElementById("db_port").value) || 5432,
+    name: document.getElementById("db_name").value.trim() || "sofia_storage_user",
+    user: document.getElementById("db_user").value.trim(),
+    pass: document.getElementById("db_pass").value
+  };
+
+  if (!config.host || !config.user || !config.pass) {
+    showMessage("db_msg", "Please fill in all database fields", "error");
+    return;
+  }
+
+  USER_CONFIG.database = config;
+  await saveConfigToSupabase();
+  showMessage("db_msg", "Database configuration saved successfully!", "success");
+  updateConfigStatus();
+}
+
+async function saveStorageConfig() {
+  const config = {
+    url: document.getElementById("storage_url").value.trim(),
+    key: document.getElementById("storage_key").value.trim()
+  };
+
+  if (!config.url || !config.key) {
+    showMessage("storage_msg", "Please fill in all storage fields", "error");
+    return;
+  }
+
+  USER_CONFIG.storage = config;
+  await saveConfigToSupabase();
+  showMessage("storage_msg", "Storage configuration saved successfully!", "success");
+  updateConfigStatus();
+}
+
+async function saveConfigToSupabase() {
+  if (!SESSION.logged) return;
+  
+  const { data: existing } = await supabase
+    .from("user_configurations")
+    .select("id")
+    .eq("user_id", USER.id)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase
+      .from("user_configurations")
+      .update({ config: USER_CONFIG, updated_at: new Date() })
+      .eq("user_id", USER.id);
+  } else {
+    await supabase
+      .from("user_configurations")
+      .insert([{
+        user_id: USER.id,
+        config: USER_CONFIG,
+        created_at: new Date(),
+        updated_at: new Date()
+      }]);
+  }
+}
+
+// ======================
 // PROFILE
 // ======================
 async function saveProfile() {
@@ -745,6 +853,8 @@ window.openPreviewModal = openPreviewModal;
 window.closePreviewModal = closePreviewModal;
 window.downloadCurrentFile = downloadCurrentFile;
 window.saveProfile = saveProfile;
+window.saveDBConfig = saveDBConfig;
+window.saveStorageConfig = saveStorageConfig;
 window.toggleTaskSelection = toggleTaskSelection;
 window.setFileAgentFilter = setFileAgentFilter;
 window.setFileLLMFilter = setFileLLMFilter;
@@ -759,6 +869,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (SESSION.logged) {
     await loadAgentsAndLLMs();
+    await loadUserConfig();
   }
 });
 
