@@ -781,7 +781,17 @@ async function saveStorageConfig() {
   let url = document.getElementById("storage_url").value.trim();
   const key = document.getElementById("storage_key").value.trim();
 
-  // Normalizar URL: adicionar https:// se não tiver
+  if (!url || !key) {
+    showMessage("storage_msg", "Please fill in all storage fields first", "error");
+    return;
+  }
+
+  // Normalizar URL: remover db. se estiver no início (caso do usuário colar a connection string)
+  if (url.startsWith("db.")) {
+    url = url.substring(3);
+  }
+
+  // Adicionar https:// se não tiver
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
     url = "https://" + url;
   }
@@ -790,11 +800,6 @@ async function saveStorageConfig() {
     url: url,
     key: key
   };
-
-  if (!config.url || !config.key) {
-    showMessage("storage_msg", "Please fill in all storage fields first", "error");
-    return;
-  }
 
   USER_CONFIG.storage = config;
   await saveConfigToSupabase();
@@ -871,14 +876,19 @@ async function testStorageConnection() {
   let url = document.getElementById("storage_url").value.trim();
   const key = document.getElementById("storage_key").value.trim();
 
-  // Normalizar URL: adicionar https:// se não tiver
-  if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    url = "https://" + url;
-  }
-
   if (!url || !key) {
     showMessage("storage_msg", "Please fill in all storage fields first", "error");
     return;
+  }
+
+  // Normalizar URL: remover db. se estiver no início (caso do usuário colar a connection string)
+  if (url.startsWith("db.")) {
+    url = url.substring(3);
+  }
+
+  // Adicionar https:// se não tiver
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = "https://" + url;
   }
 
   showMessage("storage_msg", "Testing connection...", "info");
