@@ -871,7 +871,7 @@ async function testStorageConnection() {
   showMessage("storage_msg", "Testing connection...", "info");
 
   try {
-    const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2");
+    const { createClient } = await import("./lib/supabase.js");
     const testClient = createClient(url, key);
     const { data, error } = await testClient.storage.from("sofia_storage_user").list("", { limit: 1 });
     
