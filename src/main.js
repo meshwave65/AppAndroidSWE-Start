@@ -754,8 +754,10 @@ async function loadUserConfig() {
   const localData = localStorage.getItem(CONFIG_STORAGE_KEY);
   if (localData) {
     try {
-      USER_CONFIG = JSON.parse(localData);
-      console.log("Configurações carregadas localmente");
+      const parsed = JSON.parse(localData);
+      // Mesclar para não perder campos novos se houver atualização de estrutura
+      USER_CONFIG = { ...USER_CONFIG, ...parsed };
+      console.log("Configurações carregadas localmente:", USER_CONFIG);
     } catch (e) {
       console.error("Erro ao ler config local:", e);
     }
@@ -763,18 +765,26 @@ async function loadUserConfig() {
 
   // 2. Se estiver logado, tentar sincronizar com o Supabase (Backup/Nuvem)
   if (SESSION.logged) {
-    const { data, error } = await supabase
-      .from("user_configurations")
-      .select("*")
-      .eq("user_id", USER.id)
-      .maybeSingle();
-    
-    if (data && data.config) {
-      // Se tiver na nuvem e não local, ou se a da nuvem for mais recente (simplificado: se não tiver local, usa nuvem)
-      if (!localData) {
-        USER_CONFIG = data.config;
-        localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(USER_CONFIG));
+    try {
+      const { data, error } = await supabase
+        .from("user_configurations")
+        .select("*")
+        .eq("user_id", USER.id)
+        .maybeSingle();
+      
+      if (data && data.config) {
+        // Se a config da nuvem existir, vamos mesclar com a local
+        // Dando preferência para a local se ela existir (pois o usuário pode ter alterado e ainda não sincronizado)
+        if (!localData) {
+          USER_CONFIG = data.config;
+          localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(USER_CONFIG));
+        } else {
+          // Opcional: Lógica de resolução de conflitos ou atualização se a da nuvem for mais nova
+          // Por enquanto, mantemos a local como soberana se o usuário acabou de abrir o app
+        }
       }
+    } catch (err) {
+      console.error("Erro ao sincronizar com nuvem:", err);
     }
   }
   
@@ -785,6 +795,7 @@ async function loadUserConfig() {
 function populateConfigFields() {
   if (USER_CONFIG.database) {
     if (document.getElementById("db_uri")) document.getElementById("db_uri").value = USER_CONFIG.database.uri || "";
+    if (document.getElementById("db_pass")) document.getElementById("db_pass").value = USER_CONFIG.database.pass || "";
   }
   if (USER_CONFIG.storage) {
     if (document.getElementById("storage_url")) document.getElementById("storage_url").value = USER_CONFIG.storage.url || "";
