@@ -492,14 +492,36 @@ async function insertTask() {
     origin_provider: extractOriginProvider(url),
     status: "STAGED"
   }));
-  const { error } = await supabase.from("appsofia_tasks").insert(payloads);
-  if (error) showToast("Erro ao inserir tarefa", "error");
-  else {
-    // Sincronizar origin_providers
+  // Chaveamento dinâmico de Banco de Dados
+  let targetClient = supabase; // Default: MeshWave
+  let isUserDB = false;
+
+  if (USER_CONFIG.database && USER_CONFIG.storage && USER_CONFIG.storage.url) {
+    try {
+      const { createClient } = await import("./lib/supabase.js");
+      targetClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
+      isUserDB = true;
+      console.log("Usando Banco de Dados do Usuário");
+    } catch (e) {
+      console.error("Erro ao inicializar cliente do usuário, usando fallback MeshWave:", e);
+    }
+  }
+
+  const { error } = await targetClient.from("appsofia_tasks").insert(payloads);
+  
+  if (error) {
+    console.error("Erro na inserção:", error);
+    if (isUserDB && (error.code === "PGRST116" || error.message.includes("does not exist"))) {
+      showToast("Tabela 'appsofia_tasks' não encontrada no seu DB. Use a aba Settings para configurar.", "error", 5000);
+    } else {
+      showToast("Erro ao inserir tarefa no banco selecionado", "error");
+    }
+  } else {
+    // Sincronizar origin_providers (apenas se for banco do usuário ou se quisermos manter sync)
     for (const payload of payloads) {
       await ensureOriginProviderInUserDB(USER.id, payload.origin_provider);
     }
-    showToast(`${urls.length} tarefa(s) inserida(s) com sucesso!", "success");
+    showToast(`${urls.length} tarefa(s) inserida(s) com sucesso no ${isUserDB ? 'seu DB' : 'DB MeshWave'}!`, "success");
     document.getElementById("task_url").value = "";
     loadTasks();
     await loadAgentsAndLLMs();
@@ -750,41 +772,16 @@ let USER_CONFIG = {
 };
 
 async function loadUserConfig() {
-  // 1. Tentar carregar do localStorage primeiro (Persistência Local)
+  // Carregar do localStorage (Persistência Local)
+  // O usuário solicitou que os dados fiquem no lado dele, não no nosso DB
   const localData = localStorage.getItem(CONFIG_STORAGE_KEY);
   if (localData) {
     try {
       const parsed = JSON.parse(localData);
-      // Mesclar para não perder campos novos se houver atualização de estrutura
       USER_CONFIG = { ...USER_CONFIG, ...parsed };
       console.log("Configurações carregadas localmente:", USER_CONFIG);
     } catch (e) {
       console.error("Erro ao ler config local:", e);
-    }
-  }
-
-  // 2. Se estiver logado, tentar sincronizar com o Supabase (Backup/Nuvem)
-  if (SESSION.logged) {
-    try {
-      const { data, error } = await supabase
-        .from("user_configurations")
-        .select("*")
-        .eq("user_id", USER.id)
-        .maybeSingle();
-      
-      if (data && data.config) {
-        // Se a config da nuvem existir, vamos mesclar com a local
-        // Dando preferência para a local se ela existir (pois o usuário pode ter alterado e ainda não sincronizado)
-        if (!localData) {
-          USER_CONFIG = data.config;
-          localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(USER_CONFIG));
-        } else {
-          // Opcional: Lógica de resolução de conflitos ou atualização se a da nuvem for mais nova
-          // Por enquanto, mantemos a local como soberana se o usuário acabou de abrir o app
-        }
-      }
-    } catch (err) {
-      console.error("Erro ao sincronizar com nuvem:", err);
     }
   }
   
@@ -884,34 +881,10 @@ async function saveStorageConfig() {
 }
 
 async function saveUserConfig() {
-  // 1. Salvar localmente sempre
+  // Salvar localmente apenas, conforme solicitado pelo usuário
+  // Isso garante privacidade e que não temos acesso às credenciais do DB do usuário
   localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(USER_CONFIG));
   console.log("Configurações salvas localmente");
-
-  // 2. Se logado, salvar no Supabase também
-  if (SESSION.logged) {
-    const { data: existing } = await supabase
-      .from("user_configurations")
-      .select("id")
-      .eq("user_id", USER.id)
-      .maybeSingle();
-
-    if (existing) {
-      await supabase
-        .from("user_configurations")
-        .update({ config: USER_CONFIG, updated_at: new Date() })
-        .eq("user_id", USER.id);
-    } else {
-      await supabase
-        .from("user_configurations")
-        .insert([{
-          user_id: USER.id,
-          config: USER_CONFIG,
-          created_at: new Date(),
-          updated_at: new Date()
-        }]);
-    }
-  }
 }
 
 async function migrateTasksToUserDB() {
@@ -1028,8 +1001,21 @@ async function testDatabaseConnection() {
 
     const { createClient } = await import("./lib/supabase.js");
     
-    // Usar a chave do storage se disponível, senão usa a default (que provavelmente falhará se for outro projeto)
-    const testClient = createClient(apiUrl, apiKey || SUPABASE_ANON_KEY);
+    // Importar chaves padrão se necessário
+    let finalApiKey = apiKey;
+    if (!finalApiKey) {
+      // Se não tiver chave de storage, tenta inferir se é o projeto default da MeshWave
+      if (apiUrl.includes("ufylccbdjfzydbwhpmpp")) {
+        finalApiKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmeWxjY2JkamZ6eWRid2hwbXBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MDE1NjgsImV4cCI6MjA3NzI3NzU2OH0.SqbNgLH2_0gRwrQokFQpZgnIjzH2vVZtpoqmqj8tCgk";
+      }
+    }
+
+    if (!finalApiKey) {
+      showMessage("db_msg", "⚠️ Anon Key not found. Please configure Storage first.", "warning");
+      return;
+    }
+    
+    const testClient = createClient(apiUrl, finalApiKey);
     
     // Tentar acessar a tabela 'appsofia_tasks' que é o que o sistema usa
     const { data, error } = await testClient
@@ -1077,7 +1063,18 @@ async function testStorageConnection() {
 
   try {
     const { createClient } = await import("./lib/supabase.js");
-    const testClient = createClient(url, key);
+    
+    let finalKey = key;
+    if (!finalKey && url.includes("ufylccbdjfzydbwhpmpp")) {
+      finalKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmeWxjY2JkamZ6eWRid2hwbXBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MDE1NjgsImV4cCI6MjA3NzI3NzU2OH0.SqbNgLH2_0gRwrQokFQpZgnIjzH2vVZtpoqmqj8tCgk";
+    }
+
+    if (!finalKey) {
+      showMessage("storage_msg", "Please provide the Supabase Anon Key", "error");
+      return;
+    }
+
+    const testClient = createClient(url, finalKey);
     const { data, error } = await testClient.storage.from("sofia_storage_user").list("", { limit: 1 });
     
     if (error) {
@@ -1170,3 +1167,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 setInterval(updateUserDisplay, 1000);
+
+function copySQL() {
+  const textarea = document.getElementById("sql_setup");
+  if (textarea) {
+    textarea.select();
+    document.execCommand("copy");
+    showToast("SQL copiado para a área de transferência!", "success");
+  }
+}
+window.copySQL = copySQL;

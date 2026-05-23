@@ -292,6 +292,43 @@
         <div id="migration_msg" class="message"></div>
       </div>
 
+      <!-- ================= TABLE SETUP SECTION ================= -->
+      <div class="card">
+        <h2>🛠️ Setup das Tabelas</h2>
+        <p style="font-size: 12px; color: var(--muted); margin-bottom: 15px;">Execute o SQL abaixo no seu painel do Supabase para criar as tabelas necessárias.</p>
+        
+        <div class="form-group">
+          <textarea id="sql_setup" readonly rows="5" style="font-family: monospace; font-size: 10px; background: #0a0f19;">
+-- Criar tabela de tarefas
+CREATE TABLE IF NOT EXISTS appsofia_tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  user_name TEXT,
+  agente TEXT,
+  full_url TEXT,
+  session_user_id UUID,
+  user_uuid UUID,
+  slug TEXT,
+  client_uuid UUID,
+  origin_provider TEXT,
+  status TEXT DEFAULT 'STAGED',
+  extractor_status TEXT,
+  downloader_status TEXT
+);
+
+-- Criar tabela de providers
+CREATE TABLE IF NOT EXISTS user_origin_providers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_uuid UUID,
+  client_uuid UUID,
+  origin_provider TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+          </textarea>
+          <button type="button" class="btn btn-secondary btn-block" onclick="copySQL()">📋 Copiar SQL</button>
+        </div>
+      </div>
+
       <!-- ================= CONFIGURATION STATUS ================= -->
       <div class="card" style="background: #0a0f19; border: 1px solid var(--border);">
         <h3>⚡ Configuration Status</h3>
