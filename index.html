@@ -305,7 +305,7 @@ CREATE TABLE IF NOT EXISTS appsofia_tasks (
   created_at TIMESTAMPTZ DEFAULT now(),
   user_name TEXT,
   agente TEXT,
-  full_url TEXT,
+  url TEXT,
   session_user_id UUID,
   user_uuid UUID,
   slug TEXT,
@@ -313,7 +313,8 @@ CREATE TABLE IF NOT EXISTS appsofia_tasks (
   origin_provider TEXT,
   status TEXT DEFAULT 'STAGED',
   extractor_status TEXT,
-  downloader_status TEXT
+  downloader_status TEXT,
+  metadata JSONB DEFAULT '{}'::jsonb
 );
 
 -- Criar tabela de providers
@@ -322,7 +323,8 @@ CREATE TABLE IF NOT EXISTS user_origin_providers (
   user_uuid UUID,
   client_uuid UUID,
   origin_provider TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_uuid, origin_provider)
 );
           </textarea>
           <button type="button" class="btn btn-secondary btn-block" onclick="copySQL()">📋 Copiar SQL</button>

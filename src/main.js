@@ -169,12 +169,18 @@ function openPreviewModal(file) {
   const ext = cleanFilename.split(".").pop().toLowerCase();
   
   // Chaveamento dinâmico de storage: usar o storage do usuário se configurado
+  // MAS: se o arquivo é local (começa com mnt/), usar SEMPRE a API central
   let fileUrl;
-  if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
-    // Usar o storage do usuário
+  const isLocalFile = file.path && (file.path.startsWith('mnt/') || file.path.startsWith('/mnt/'));
+  
+  if (isLocalFile) {
+    // Arquivos locais SEMPRE usam a API central
+    fileUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(file.path)}&download=false`;
+  } else if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
+    // Usar o storage do usuário para arquivos remotos
     fileUrl = `${USER_CONFIG.storage.url}/storage/v1/object/public/sofia_storage_user/${file.path}`;
   } else {
-    // Usar a API central (fallback)
+    // Fallback: API central
     fileUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(file.path)}&download=false`;
   }
   
@@ -411,11 +417,16 @@ async function loadTasks() {
   if (!SESSION.logged) return;
   
   let targetClient = supabase;
+  let usingUserDB = false;
+  
   if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
     try {
       targetClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
+      usingUserDB = true;
     } catch (e) {
       console.error("Erro ao usar banco do usuário, usando MeshWave:", e);
+      targetClient = supabase;
+      usingUserDB = false;
     }
   }
 
@@ -426,9 +437,30 @@ async function loadTasks() {
   if (filterAgent && filterAgent !== "ALL") query = query.eq("agente", filterAgent);
   if (filterLLM && filterLLM !== "ALL") query = query.eq("origin_provider", filterLLM);
   if (filterStatus && filterStatus !== "ALL") query = query.eq("status", filterStatus);
+  
   const { data, error } = await query.order("created_at", { ascending: false });
-  if (error) return;
-  TASKS = data || [];
+  
+  if (error && usingUserDB) {
+    console.warn("Falha ao carregar tarefas do banco do usuário, tentando MeshWave:", error);
+    targetClient = supabase;
+    query = targetClient.from("appsofia_tasks").select("*").eq("session_user_id", USER.id);
+    if (filterAgent && filterAgent !== "ALL") query = query.eq("agente", filterAgent);
+    if (filterLLM && filterLLM !== "ALL") query = query.eq("origin_provider", filterLLM);
+    if (filterStatus && filterStatus !== "ALL") query = query.eq("status", filterStatus);
+    const { data: fallbackData, error: fallbackError } = await query.order("created_at", { ascending: false });
+    if (fallbackError) {
+      console.error("Erro ao carregar tarefas do MeshWave:", fallbackError);
+      TASKS = [];
+    } else {
+      TASKS = fallbackData || [];
+    }
+  } else if (error) {
+    console.error("Erro ao carregar tarefas:", error);
+    TASKS = [];
+  } else {
+    TASKS = data || [];
+  }
+  
   renderTasks();
 }
 
@@ -705,11 +737,16 @@ function renderFileTree() {
 
 function downloadFile(path) {
   let downloadUrl;
-  if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
-    // Usar o storage do usuário
+  const isLocalFile = path && (path.startsWith('mnt/') || path.startsWith('/mnt/'));
+  
+  if (isLocalFile) {
+    // Arquivos locais SEMPRE usam a API central
+    downloadUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(path)}&download=true`;
+  } else if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
+    // Usar o storage do usuário para arquivos remotos
     downloadUrl = `${USER_CONFIG.storage.url}/storage/v1/object/public/sofia_storage_user/${path}`;
   } else {
-    // Usar a API central (fallback)
+    // Fallback: API central
     downloadUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(path)}&download=true`;
   }
   window.open(downloadUrl, "_blank");
@@ -1031,6 +1068,12 @@ async function testDatabaseConnection() {
       return;
     }
     
+    // Validar formato da Anon Key
+    if (!finalApiKey.startsWith("eyJ")) {
+      showMessage("db_msg", "❌ Invalid Anon Key format. Supabase keys should start with 'eyJ'. Please check your Storage configuration.", "error");
+      return;
+    }
+    
     const testClient = createClient(apiUrl, finalApiKey);
     
     // Tentar acessar a tabela 'appsofia_tasks' que é o que o sistema usa
@@ -1087,6 +1130,12 @@ async function testStorageConnection() {
 
     if (!finalKey) {
       showMessage("storage_msg", "Please provide the Supabase Anon Key", "error");
+      return;
+    }
+    
+    // Validar formato da Anon Key
+    if (!finalKey.startsWith("eyJ")) {
+      showMessage("storage_msg", "❌ Invalid Anon Key format. Supabase keys should start with 'eyJ'. Please check your key.", "error");
       return;
     }
 

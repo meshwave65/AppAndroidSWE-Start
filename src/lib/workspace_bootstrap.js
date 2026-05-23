@@ -18,6 +18,7 @@ export async function bootstrapUserWorkspace(url, key) {
           user_name text,
           client_uuid uuid,
           session_user_id uuid,
+          user_uuid uuid,
           url text,
           slug text,
           origin_provider text,
@@ -36,6 +37,7 @@ export async function bootstrapUserWorkspace(url, key) {
           id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
           created_at timestamptz DEFAULT now(),
           user_uuid uuid,
+          client_uuid uuid,
           origin_provider text,
           UNIQUE(user_uuid, origin_provider)
         );
