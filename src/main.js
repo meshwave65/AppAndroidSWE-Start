@@ -16,6 +16,8 @@
 
 import "./style.css";
 import { supabase } from "./lib/supabase.js";
+import { createClient } from '@supabase/supabase-js';
+import { bootstrapUserWorkspace } from './lib/workspace_bootstrap.js';
 
 const MESH_WAVE_UUID = "7891b8f4-68cc-4344-89e1-c000b80918bb";
 const API_BASE_URL = "https://appsofia.meshwave.com.br";
@@ -407,7 +409,17 @@ async function loadAgentsAndLLMs() {
 // ======================
 async function loadTasks() {
   if (!SESSION.logged) return;
-  let query = supabase.from("appsofia_tasks").select("*").eq("session_user_id", USER.id);
+  
+  let targetClient = supabase;
+  if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
+    try {
+      targetClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
+    } catch (e) {
+      console.error("Erro ao usar banco do usuário, usando MeshWave:", e);
+    }
+  }
+
+  let query = targetClient.from("appsofia_tasks").select("*").eq("session_user_id", USER.id);
   const filterAgent = document.getElementById("filter_agent")?.value;
   const filterLLM = document.getElementById("filter_llm")?.value;
   const filterStatus = document.getElementById("filter_status")?.value;
@@ -859,24 +871,28 @@ async function saveStorageConfig() {
     return;
   }
 
-  // Normalizar URL: remover db. se estiver no início (caso do usuário colar a connection string)
-  if (url.startsWith("db.")) {
-    url = url.substring(3);
-  }
+  if (url.startsWith("db.")) url = url.substring(3);
+  if (!url.startsWith("http://") && !url.startsWith("https://")) url = "https://" + url;
 
-  // Adicionar https:// se não tiver
-  if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    url = "https://" + url;
-  }
-
-  const config = {
-    url: url,
-    key: key
-  };
-
+  const config = { url, key };
   USER_CONFIG.storage = config;
   await saveUserConfig();
-  showMessage("storage_msg", "Storage configuration saved successfully!", "success");
+  
+  showMessage("storage_msg", "Storage saved. Checking workspace...", "info");
+  
+  try {
+    const results = await bootstrapUserWorkspace(url, key);
+    const allOk = results.every(r => r.status === 'ok');
+    if (allOk) {
+      showMessage("storage_msg", "✅ Storage & Workspace Ready!", "success");
+    } else {
+      const missing = results.filter(r => r.status === 'missing').map(r => r.table).join(", ");
+      showMessage("storage_msg", `⚠️ Tables missing: ${missing}. Use SQL setup below.`, "warning");
+    }
+  } catch (e) {
+    showMessage("storage_msg", "Storage saved, but workspace check failed.", "warning");
+  }
+  
   updateConfigStatus();
 }
 
