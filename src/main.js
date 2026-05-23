@@ -742,24 +742,44 @@ function renderSearchResults() {
 // ======================
 // SETTINGS & CONFIGURATION
 // ======================
+const CONFIG_STORAGE_KEY = "sofia_user_config";
+
 let USER_CONFIG = {
   database: null,
   storage: null
 };
 
 async function loadUserConfig() {
-  if (!SESSION.logged) return;
-  const { data, error } = await supabase
-    .from("user_configurations")
-    .select("*")
-    .eq("user_id", USER.id)
-    .maybeSingle();
-  
-  if (data) {
-    USER_CONFIG = data.config || USER_CONFIG;
-    populateConfigFields();
-    updateConfigStatus();
+  // 1. Tentar carregar do localStorage primeiro (Persistência Local)
+  const localData = localStorage.getItem(CONFIG_STORAGE_KEY);
+  if (localData) {
+    try {
+      USER_CONFIG = JSON.parse(localData);
+      console.log("Configurações carregadas localmente");
+    } catch (e) {
+      console.error("Erro ao ler config local:", e);
+    }
   }
+
+  // 2. Se estiver logado, tentar sincronizar com o Supabase (Backup/Nuvem)
+  if (SESSION.logged) {
+    const { data, error } = await supabase
+      .from("user_configurations")
+      .select("*")
+      .eq("user_id", USER.id)
+      .maybeSingle();
+    
+    if (data && data.config) {
+      // Se tiver na nuvem e não local, ou se a da nuvem for mais recente (simplificado: se não tiver local, usa nuvem)
+      if (!localData) {
+        USER_CONFIG = data.config;
+        localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(USER_CONFIG));
+      }
+    }
+  }
+  
+  populateConfigFields();
+  updateConfigStatus();
 }
 
 function populateConfigFields() {
@@ -817,7 +837,7 @@ async function saveDBConfig() {
   }
 
   USER_CONFIG.database = parsed;
-  await saveConfigToSupabase();
+  await saveUserConfig();
   showMessage("db_msg", "Database configuration saved successfully!", "success");
   updateConfigStatus();
 }
@@ -847,34 +867,39 @@ async function saveStorageConfig() {
   };
 
   USER_CONFIG.storage = config;
-  await saveConfigToSupabase();
+  await saveUserConfig();
   showMessage("storage_msg", "Storage configuration saved successfully!", "success");
   updateConfigStatus();
 }
 
-async function saveConfigToSupabase() {
-  if (!SESSION.logged) return;
-  
-  const { data: existing } = await supabase
-    .from("user_configurations")
-    .select("id")
-    .eq("user_id", USER.id)
-    .maybeSingle();
+async function saveUserConfig() {
+  // 1. Salvar localmente sempre
+  localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(USER_CONFIG));
+  console.log("Configurações salvas localmente");
 
-  if (existing) {
-    await supabase
+  // 2. Se logado, salvar no Supabase também
+  if (SESSION.logged) {
+    const { data: existing } = await supabase
       .from("user_configurations")
-      .update({ config: USER_CONFIG, updated_at: new Date() })
-      .eq("user_id", USER.id);
-  } else {
-    await supabase
-      .from("user_configurations")
-      .insert([{
-        user_id: USER.id,
-        config: USER_CONFIG,
-        created_at: new Date(),
-        updated_at: new Date()
-      }]);
+      .select("id")
+      .eq("user_id", USER.id)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from("user_configurations")
+        .update({ config: USER_CONFIG, updated_at: new Date() })
+        .eq("user_id", USER.id);
+    } else {
+      await supabase
+        .from("user_configurations")
+        .insert([{
+          user_id: USER.id,
+          config: USER_CONFIG,
+          created_at: new Date(),
+          updated_at: new Date()
+        }]);
+    }
   }
 }
 
@@ -919,14 +944,7 @@ async function migrateTasksToUserDB() {
     };
     
     USER_CONFIG.migration_status = migrationData;
-    
-    const { error: updateError } = await supabase
-      .from("user_configurations")
-      .update({
-        config: USER_CONFIG,
-        updated_at: new Date()
-      })
-      .eq("user_id", USER.id);
+    await saveUserConfig();
     
     if (updateError) {
       showMessage("migration_msg", "Erro ao atualizar status", "error");
@@ -968,32 +986,57 @@ async function testDatabaseConnection() {
   showMessage("db_msg", "Testing connection...", "info");
 
   try {
-    // Extrair URL do Supabase da connection string
-    // Formato: postgresql://postgres.[project-id]:[password]@[host]:[port]/[database]
-    const supabaseUrl = `https://${config.host}`;
+    // No Supabase, o host do banco (ex: db.xxxx.supabase.co) é diferente da URL da API (ex: xxxx.supabase.co)
+    // Se o usuário já configurou o Storage, podemos tentar usar a URL de lá
+    let apiUrl = "";
+    let apiKey = "";
+
+    if (USER_CONFIG.storage && USER_CONFIG.storage.url) {
+      apiUrl = USER_CONFIG.storage.url;
+      apiKey = USER_CONFIG.storage.key;
+    } else {
+      // Tentar inferir a URL da API a partir do host do banco
+      // db.ufylccbdjfzydbwhpmpp.supabase.co -> ufylccbdjfzydbwhpmpp.supabase.co
+      if (config.host.startsWith("db.")) {
+        apiUrl = "https://" + config.host.substring(3);
+      } else if (config.host.includes("pooler.supabase.com")) {
+        // Formato pooler: aws-0-sa-east-1.pooler.supabase.com
+        // Aqui não dá pra inferir o project ref facilmente sem o username
+        // O username geralmente é postgres.[project-ref]
+        const parts = config.user.split(".");
+        if (parts.length > 1) {
+          apiUrl = `https://${parts[1]}.supabase.co`;
+        }
+      }
+    }
+
+    if (!apiUrl) {
+      showMessage("db_msg", "⚠️ Could not determine API URL. Please configure Storage first.", "warning");
+      return;
+    }
+
     const { createClient } = await import("./lib/supabase.js");
     
-    // Criar um cliente Supabase com as credenciais fornecidas
-    // Nota: O Supabase PostgREST API usa o anon key para autenticação
-    // Vamos tentar uma query simples para validar a conexão
-    const testClient = createClient(supabaseUrl, SUPABASE_ANON_KEY);
+    // Usar a chave do storage se disponível, senão usa a default (que provavelmente falhará se for outro projeto)
+    const testClient = createClient(apiUrl, apiKey || SUPABASE_ANON_KEY);
     
-    // Tentar acessar uma tabela simples para validar a conexão
+    // Tentar acessar a tabela 'appsofia_tasks' que é o que o sistema usa
     const { data, error } = await testClient
-      .from("clients")
+      .from("appsofia_tasks")
       .select("id")
       .limit(1);
     
     if (error) {
-      // Se o erro for de autenticação, pode ser que a chave anon não seja válida para este projeto
-      // Mas a conexão ao banco ainda está ok
-      if (error.message.includes("401") || error.message.includes("Unauthorized")) {
-        showMessage("db_msg", "⚠️ Database connection OK, but authentication key may need adjustment", "warning");
+      // Se a tabela não existir, ainda é uma conexão bem-sucedida com a API
+      if (error.code === "PGRST116" || error.message.includes("does not exist")) {
+        showMessage("db_msg", "✅ API Connected, but 'appsofia_tasks' table not found. You may need to run migrations.", "warning");
+      } else if (error.message.includes("401") || error.message.includes("Unauthorized")) {
+        showMessage("db_msg", "❌ Authentication failed. Check your Supabase Anon Key in Storage settings.", "error");
       } else {
         showMessage("db_msg", `❌ Connection failed: ${error.message}`, "error");
       }
     } else {
-      showMessage("db_msg", "✅ Database connection successful!", "success");
+      showMessage("db_msg", "✅ Database API connection successful!", "success");
     }
   } catch (error) {
     showMessage("db_msg", `❌ Connection error: ${error.message}`, "error");
@@ -1102,10 +1145,15 @@ window.ensureOriginProviderInUserDB = ensureOriginProviderInUserDB;
 // ======================
 document.addEventListener("DOMContentLoaded", async () => {
   showTab(1);
+  
+  // Carregar config local o mais rápido possível (antes mesmo do login)
+  await loadUserConfig();
+  
   await restoreSession();
 
   if (SESSION.logged) {
     await loadAgentsAndLLMs();
+    // Recarregar para sincronizar com a nuvem se logado
     await loadUserConfig();
   }
 });
