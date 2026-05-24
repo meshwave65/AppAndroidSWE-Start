@@ -582,14 +582,18 @@ async function insertTask() {
   let targetClient = supabase; // Default: MeshWave
   let isUserDB = false;
 
-  if (USER_CONFIG.database && USER_CONFIG.storage && USER_CONFIG.storage.url) {
+  // IMPORTANTE: Para o insert, precisamos do client Supabase (URL + Key)
+  // O sistema usa a URL e Key configuradas no Storage para acessar a API do Supabase
+  if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
     try {
       const { createClient } = await import("./lib/supabase.js");
       targetClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
       isUserDB = true;
-      console.log("Usando Banco de Dados do Usuário");
+      console.log("Usando Banco de Dados do Usuário via API Supabase");
     } catch (e) {
       console.error("Erro ao inicializar cliente do usuário, usando fallback MeshWave:", e);
+      targetClient = supabase;
+      isUserDB = false;
     }
   }
 
@@ -982,6 +986,31 @@ async function saveUserConfig() {
   console.log("Configurações salvas localmente");
 }
 
+async function clearUserConfig() {
+  if (confirm("Tem certeza que deseja limpar todas as configurações personalizadas? O sistema voltará a usar o banco de dados padrão da MeshWave.")) {
+    localStorage.removeItem(CONFIG_STORAGE_KEY);
+    USER_CONFIG = {
+      database: null,
+      storage: null
+    };
+    
+    // Limpar campos da UI
+    const fields = ["db_uri", "db_pass", "storage_url", "storage_key"];
+    fields.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+    
+    updateConfigStatus();
+    showToast("Configurações limpas com sucesso!", "success");
+    
+    // Recarregar dados para garantir que volte ao default
+    await loadAgentsAndLLMs();
+    await loadTasks();
+    await loadFiles();
+  }
+}
+
 async function migrateTasksToUserDB() {
   if (!USER_CONFIG.database) {
     showToast("Configure o banco de dados primeiro", "error");
@@ -1260,6 +1289,7 @@ window.setFileSlugFilter = setFileSlugFilter;
 window.migrateTasksToUserDB = migrateTasksToUserDB;
 window.ensureOriginProviderInUserDB = ensureOriginProviderInUserDB;
 window.ensureAgentFallback = ensureAgentFallback;
+window.clearUserConfig = clearUserConfig;
 
 // ======================
 // INITIALIZATION
