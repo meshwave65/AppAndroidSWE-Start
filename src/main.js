@@ -570,7 +570,7 @@ async function insertTask() {
   const payloads = urls.map(url => ({
     user_name: USER.user_name,
     agente: agentName,
-    url: url,
+    full_url: url,
     session_user_id: USER.id,
     user_uuid: USER.id,
     slug: extractSlugFromUrl(url),
