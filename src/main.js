@@ -16,8 +16,6 @@
 
 import "./style.css";
 import { supabase } from "./lib/supabase.js";
-import { createClient } from '@supabase/supabase-js';
-import { bootstrapUserWorkspace } from './lib/workspace_bootstrap.js';
 
 const MESH_WAVE_UUID = "7891b8f4-68cc-4344-89e1-c000b80918bb";
 const API_BASE_URL = "https://appsofia.meshwave.com.br";
@@ -124,49 +122,6 @@ function getStatusClass(status) {
 
 async function ensureAgent(user_uuid, agent_name) {
   if (!agent_name || !user_uuid) return;
-  
-  // Chaveamento dinâmico
-  let targetClient = supabase;
-  if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
-    try {
-      const { createClient } = await import("./lib/supabase.js");
-      targetClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
-    } catch (e) {
-      targetClient = supabase;
-    }
-  }
-
-  const { data: existing } = await targetClient
-    .from("user_agents")
-    .select("id")
-    .eq("user_uuid", user_uuid)
-    .eq("agent_name", agent_name)
-    .maybeSingle();
-    
-  if (existing) return existing;
-  
-  const { data, error } = await targetClient
-    .from("user_agents")
-    .insert([{
-      user_uuid,
-      client_uuid: MESH_WAVE_UUID,
-      agent_name
-    }])
-    .select()
-    .maybeSingle();
-    
-  if (error) {
-    console.error("Error ensuring agent:", error);
-    // Se falhar no banco do usuário, tenta no MeshWave como fallback
-    if (targetClient !== supabase) {
-      return await ensureAgentFallback(user_uuid, agent_name);
-    }
-    return null;
-  }
-  return data;
-}
-
-async function ensureAgentFallback(user_uuid, agent_name) {
   const { data: existing } = await supabase
     .from("user_agents")
     .select("id")
@@ -174,7 +129,7 @@ async function ensureAgentFallback(user_uuid, agent_name) {
     .eq("agent_name", agent_name)
     .maybeSingle();
   if (existing) return existing;
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("user_agents")
     .insert([{
       user_uuid,
@@ -183,6 +138,7 @@ async function ensureAgentFallback(user_uuid, agent_name) {
     }])
     .select()
     .maybeSingle();
+  if (error) return null;
   return data;
 }
 
@@ -211,18 +167,15 @@ function openPreviewModal(file) {
   const ext = cleanFilename.split(".").pop().toLowerCase();
   
   // Chaveamento dinâmico de storage: usar o storage do usuário se configurado
-  // MAS: se o arquivo é local (começa com mnt/), usar SEMPRE a API central
   let fileUrl;
-  const isLocalFile = file.path && (file.path.startsWith('mnt/') || file.path.startsWith('/mnt/'));
+  // Se o caminho for absoluto (começa com /mnt), usamos sempre a API central
+  const isAbsolutePath = file.path && file.path.startsWith("/");
   
-  if (isLocalFile) {
-    // Arquivos locais SEMPRE usam a API central
-    fileUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(file.path)}&download=false`;
-  } else if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
-    // Usar o storage do usuário para arquivos remotos
+  if (!isAbsolutePath && USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
+    // Usar o storage do usuário para caminhos relativos (Supabase)
     fileUrl = `${USER_CONFIG.storage.url}/storage/v1/object/public/sofia_storage_user/${file.path}`;
   } else {
-    // Fallback: API central
+    // Usar a API central para caminhos absolutos (Search) ou fallback
     fileUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(file.path)}&download=false`;
   }
   
@@ -457,52 +410,16 @@ async function loadAgentsAndLLMs() {
 // ======================
 async function loadTasks() {
   if (!SESSION.logged) return;
-  
-  let targetClient = supabase;
-  let usingUserDB = false;
-  
-  if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
-    try {
-      targetClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
-      usingUserDB = true;
-    } catch (e) {
-      console.error("Erro ao usar banco do usuário, usando MeshWave:", e);
-      targetClient = supabase;
-      usingUserDB = false;
-    }
-  }
-
-  let query = targetClient.from("appsofia_tasks").select("*").eq("session_user_id", USER.id);
+  let query = supabase.from("appsofia_tasks").select("*").eq("session_user_id", USER.id);
   const filterAgent = document.getElementById("filter_agent")?.value;
   const filterLLM = document.getElementById("filter_llm")?.value;
   const filterStatus = document.getElementById("filter_status")?.value;
   if (filterAgent && filterAgent !== "ALL") query = query.eq("agente", filterAgent);
   if (filterLLM && filterLLM !== "ALL") query = query.eq("origin_provider", filterLLM);
   if (filterStatus && filterStatus !== "ALL") query = query.eq("status", filterStatus);
-  
   const { data, error } = await query.order("created_at", { ascending: false });
-  
-  if (error && usingUserDB) {
-    console.warn("Falha ao carregar tarefas do banco do usuário, tentando MeshWave:", error);
-    targetClient = supabase;
-    query = targetClient.from("appsofia_tasks").select("*").eq("session_user_id", USER.id);
-    if (filterAgent && filterAgent !== "ALL") query = query.eq("agente", filterAgent);
-    if (filterLLM && filterLLM !== "ALL") query = query.eq("origin_provider", filterLLM);
-    if (filterStatus && filterStatus !== "ALL") query = query.eq("status", filterStatus);
-    const { data: fallbackData, error: fallbackError } = await query.order("created_at", { ascending: false });
-    if (fallbackError) {
-      console.error("Erro ao carregar tarefas do MeshWave:", fallbackError);
-      TASKS = [];
-    } else {
-      TASKS = fallbackData || [];
-    }
-  } else if (error) {
-    console.error("Erro ao carregar tarefas:", error);
-    TASKS = [];
-  } else {
-    TASKS = data || [];
-  }
-  
+  if (error) return;
+  TASKS = data || [];
   renderTasks();
 }
 
@@ -582,42 +499,25 @@ async function insertTask() {
   let targetClient = supabase; // Default: MeshWave
   let isUserDB = false;
 
-  // IMPORTANTE: Para o insert, precisamos do client Supabase (URL + Key)
-  // O sistema usa a URL e Key configuradas no Storage para acessar a API do Supabase
-  if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
+  if (USER_CONFIG.database && USER_CONFIG.storage && USER_CONFIG.storage.url) {
     try {
       const { createClient } = await import("./lib/supabase.js");
       targetClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
       isUserDB = true;
-      console.log("Usando Banco de Dados do Usuário via API Supabase");
+      console.log("Usando Banco de Dados do Usuário");
     } catch (e) {
       console.error("Erro ao inicializar cliente do usuário, usando fallback MeshWave:", e);
-      targetClient = supabase;
-      isUserDB = false;
     }
   }
 
-  let { error } = await targetClient.from("appsofia_tasks").insert(payloads);
-  
-  // FALLBACK AUTOMÁTICO: Se falhou no banco do usuário, tenta no banco padrão da MeshWave
-  if (error && isUserDB) {
-    console.warn("Falha ao inserir no banco do usuário, tentando fallback MeshWave:", error);
-    showToast("Falha no seu DB, tentando banco padrão MeshWave...", "info", 2000);
-    
-    targetClient = supabase;
-    isUserDB = false;
-    const { error: fallbackError } = await targetClient.from("appsofia_tasks").insert(payloads);
-    error = fallbackError;
-  }
+  const { error } = await targetClient.from("appsofia_tasks").insert(payloads);
   
   if (error) {
-    console.error("Erro final na inserção:", error);
-    const dbName = isUserDB ? "seu Banco de Dados" : "Banco de Dados MeshWave";
-    
+    console.error("Erro na inserção:", error);
     if (isUserDB && (error.code === "PGRST116" || error.message.includes("does not exist"))) {
-      showToast(`Tabela 'appsofia_tasks' não encontrada no seu DB.`, "error", 5000);
+      showToast("Tabela 'appsofia_tasks' não encontrada no seu DB. Use a aba Settings para configurar.", "error", 5000);
     } else {
-      showToast(`Erro ao inserir no ${dbName}: ${error.message || 'Erro desconhecido'}`, "error");
+      showToast("Erro ao inserir tarefa no banco selecionado", "error");
     }
   } else {
     // Sincronizar origin_providers (apenas se for banco do usuário ou se quisermos manter sync)
@@ -796,16 +696,11 @@ function renderFileTree() {
 
 function downloadFile(path) {
   let downloadUrl;
-  const isLocalFile = path && (path.startsWith('mnt/') || path.startsWith('/mnt/'));
-  
-  if (isLocalFile) {
-    // Arquivos locais SEMPRE usam a API central
-    downloadUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(path)}&download=true`;
-  } else if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
-    // Usar o storage do usuário para arquivos remotos
+  if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
+    // Usar o storage do usuário
     downloadUrl = `${USER_CONFIG.storage.url}/storage/v1/object/public/sofia_storage_user/${path}`;
   } else {
-    // Fallback: API central
+    // Usar a API central (fallback)
     downloadUrl = `${API_BASE_URL}/api/file?path=${encodeURIComponent(path)}&download=true`;
   }
   window.open(downloadUrl, "_blank");
@@ -967,28 +862,24 @@ async function saveStorageConfig() {
     return;
   }
 
-  if (url.startsWith("db.")) url = url.substring(3);
-  if (!url.startsWith("http://") && !url.startsWith("https://")) url = "https://" + url;
+  // Normalizar URL: remover db. se estiver no início (caso do usuário colar a connection string)
+  if (url.startsWith("db.")) {
+    url = url.substring(3);
+  }
 
-  const config = { url, key };
+  // Adicionar https:// se não tiver
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = "https://" + url;
+  }
+
+  const config = {
+    url: url,
+    key: key
+  };
+
   USER_CONFIG.storage = config;
   await saveUserConfig();
-  
-  showMessage("storage_msg", "Storage saved. Checking workspace...", "info");
-  
-  try {
-    const results = await bootstrapUserWorkspace(url, key);
-    const allOk = results.every(r => r.status === 'ok');
-    if (allOk) {
-      showMessage("storage_msg", "✅ Storage & Workspace Ready!", "success");
-    } else {
-      const missing = results.filter(r => r.status === 'missing').map(r => r.table).join(", ");
-      showMessage("storage_msg", `⚠️ Tables missing: ${missing}. Use SQL setup below.`, "warning");
-    }
-  } catch (e) {
-    showMessage("storage_msg", "Storage saved, but workspace check failed.", "warning");
-  }
-  
+  showMessage("storage_msg", "Storage configuration saved successfully!", "success");
   updateConfigStatus();
 }
 
@@ -997,31 +888,6 @@ async function saveUserConfig() {
   // Isso garante privacidade e que não temos acesso às credenciais do DB do usuário
   localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(USER_CONFIG));
   console.log("Configurações salvas localmente");
-}
-
-async function clearUserConfig() {
-  if (confirm("Tem certeza que deseja limpar todas as configurações personalizadas? O sistema voltará a usar o banco de dados padrão da MeshWave.")) {
-    localStorage.removeItem(CONFIG_STORAGE_KEY);
-    USER_CONFIG = {
-      database: null,
-      storage: null
-    };
-    
-    // Limpar campos da UI
-    const fields = ["db_uri", "db_pass", "storage_url", "storage_key"];
-    fields.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.value = "";
-    });
-    
-    updateConfigStatus();
-    showToast("Configurações limpas com sucesso!", "success");
-    
-    // Recarregar dados para garantir que volte ao default
-    await loadAgentsAndLLMs();
-    await loadTasks();
-    await loadFiles();
-  }
 }
 
 async function migrateTasksToUserDB() {
@@ -1112,32 +978,28 @@ async function testDatabaseConnection() {
     let apiUrl = "";
     let apiKey = "";
 
-    if (USER_CONFIG.storage && USER_CONFIG.storage.url) {
-      apiUrl = USER_CONFIG.storage.url;
-      apiKey = USER_CONFIG.storage.key;
-    } else {
-      // Tentar inferir a URL da API a partir do host do banco
-      // db.ufylccbdjfzydbwhpmpp.supabase.co -> ufylccbdjfzydbwhpmpp.supabase.co
-      if (config.host.startsWith("db.")) {
-        apiUrl = "https://" + config.host.substring(3);
-      } else if (config.host.includes("pooler.supabase.com")) {
-        // Formato pooler: aws-1-us-east-1.pooler.supabase.com
-        // O username geralmente é postgres.[project-ref]
-        const parts = config.user.split(".");
-        if (parts.length > 1) {
-          apiUrl = `https://${parts[1]}.supabase.co`;
-        } else {
-          // Fallback: tentar extrair do hostname se for o formato antigo/alternativo
-          const hostParts = config.host.split(".");
-          if (hostParts.length > 0 && hostParts[0].includes("-")) {
-             // Alguns poolers tem o project ref no host, mas o padrão é no user
-          }
-        }
+    // Prioridade 1: Tentar inferir a URL da API a partir da URI do banco (independente do storage)
+    if (config.host.startsWith("db.")) {
+      apiUrl = "https://" + config.host.substring(3);
+    } else if (config.host.includes("pooler.supabase.com")) {
+      const parts = config.user.split(".");
+      if (parts.length > 1) {
+        apiUrl = `https://${parts[1]}.supabase.co`;
       }
     }
 
+    // Prioridade 2: Se não conseguiu inferir da URI, usa a URL do storage configurada
+    if (!apiUrl && USER_CONFIG.storage && USER_CONFIG.storage.url) {
+      apiUrl = USER_CONFIG.storage.url;
+    }
+
+    // Chave de API sempre vem do storage (Anon Key)
+    if (USER_CONFIG.storage && USER_CONFIG.storage.key) {
+      apiKey = USER_CONFIG.storage.key;
+    }
+
     if (!apiUrl) {
-      showMessage("db_msg", "⚠️ Could not determine API URL. Please configure Storage first.", "warning");
+      showMessage("db_msg", "⚠️ Could not determine API URL. Please configure Storage first or use a direct Supabase URI.", "warning");
       return;
     }
 
@@ -1154,12 +1016,6 @@ async function testDatabaseConnection() {
 
     if (!finalApiKey) {
       showMessage("db_msg", "⚠️ Anon Key not found. Please configure Storage first.", "warning");
-      return;
-    }
-    
-    // Validar formato da Anon Key
-    if (!finalApiKey.startsWith("eyJ")) {
-      showMessage("db_msg", "❌ Invalid Anon Key format. Supabase keys should start with 'eyJ'. Please check your Storage configuration.", "error");
       return;
     }
     
@@ -1219,12 +1075,6 @@ async function testStorageConnection() {
 
     if (!finalKey) {
       showMessage("storage_msg", "Please provide the Supabase Anon Key", "error");
-      return;
-    }
-    
-    // Validar formato da Anon Key
-    if (!finalKey.startsWith("eyJ")) {
-      showMessage("storage_msg", "❌ Invalid Anon Key format. Supabase keys should start with 'eyJ'. Please check your key.", "error");
       return;
     }
 
@@ -1301,8 +1151,6 @@ window.setFileLLMFilter = setFileLLMFilter;
 window.setFileSlugFilter = setFileSlugFilter;
 window.migrateTasksToUserDB = migrateTasksToUserDB;
 window.ensureOriginProviderInUserDB = ensureOriginProviderInUserDB;
-window.ensureAgentFallback = ensureAgentFallback;
-window.clearUserConfig = clearUserConfig;
 
 // ======================
 // INITIALIZATION
