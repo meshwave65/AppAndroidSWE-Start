@@ -597,14 +597,27 @@ async function insertTask() {
     }
   }
 
-  const { error } = await targetClient.from("appsofia_tasks").insert(payloads);
+  let { error } = await targetClient.from("appsofia_tasks").insert(payloads);
+  
+  // FALLBACK AUTOMÁTICO: Se falhou no banco do usuário, tenta no banco padrão da MeshWave
+  if (error && isUserDB) {
+    console.warn("Falha ao inserir no banco do usuário, tentando fallback MeshWave:", error);
+    showToast("Falha no seu DB, tentando banco padrão MeshWave...", "info", 2000);
+    
+    targetClient = supabase;
+    isUserDB = false;
+    const { error: fallbackError } = await targetClient.from("appsofia_tasks").insert(payloads);
+    error = fallbackError;
+  }
   
   if (error) {
-    console.error("Erro na inserção:", error);
+    console.error("Erro final na inserção:", error);
+    const dbName = isUserDB ? "seu Banco de Dados" : "Banco de Dados MeshWave";
+    
     if (isUserDB && (error.code === "PGRST116" || error.message.includes("does not exist"))) {
-      showToast("Tabela 'appsofia_tasks' não encontrada no seu DB. Use a aba Settings para configurar.", "error", 5000);
+      showToast(`Tabela 'appsofia_tasks' não encontrada no seu DB.`, "error", 5000);
     } else {
-      showToast("Erro ao inserir tarefa no banco selecionado", "error");
+      showToast(`Erro ao inserir no ${dbName}: ${error.message || 'Erro desconhecido'}`, "error");
     }
   } else {
     // Sincronizar origin_providers (apenas se for banco do usuário ou se quisermos manter sync)
