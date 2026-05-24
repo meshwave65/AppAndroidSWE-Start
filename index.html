@@ -326,6 +326,16 @@ CREATE TABLE IF NOT EXISTS user_origin_providers (
   created_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(user_uuid, origin_provider)
 );
+
+-- Criar tabela de agentes
+CREATE TABLE IF NOT EXISTS user_agents (
+  id BIGSERIAL PRIMARY KEY,
+  client_uuid UUID NOT NULL,
+  user_uuid UUID NOT NULL,
+  agent_name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_uuid, agent_name)
+);
           </textarea>
           <button type="button" class="btn btn-secondary btn-block" onclick="copySQL()">📋 Copiar SQL</button>
         </div>

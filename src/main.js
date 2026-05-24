@@ -124,14 +124,28 @@ function getStatusClass(status) {
 
 async function ensureAgent(user_uuid, agent_name) {
   if (!agent_name || !user_uuid) return;
-  const { data: existing } = await supabase
+  
+  // Chaveamento dinâmico
+  let targetClient = supabase;
+  if (USER_CONFIG.storage && USER_CONFIG.storage.url && USER_CONFIG.storage.key) {
+    try {
+      const { createClient } = await import("./lib/supabase.js");
+      targetClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
+    } catch (e) {
+      targetClient = supabase;
+    }
+  }
+
+  const { data: existing } = await targetClient
     .from("user_agents")
     .select("id")
     .eq("user_uuid", user_uuid)
     .eq("agent_name", agent_name)
     .maybeSingle();
+    
   if (existing) return existing;
-  const { data, error } = await supabase
+  
+  const { data, error } = await targetClient
     .from("user_agents")
     .insert([{
       user_uuid,
@@ -140,7 +154,35 @@ async function ensureAgent(user_uuid, agent_name) {
     }])
     .select()
     .maybeSingle();
-  if (error) return null;
+    
+  if (error) {
+    console.error("Error ensuring agent:", error);
+    // Se falhar no banco do usuário, tenta no MeshWave como fallback
+    if (targetClient !== supabase) {
+      return await ensureAgentFallback(user_uuid, agent_name);
+    }
+    return null;
+  }
+  return data;
+}
+
+async function ensureAgentFallback(user_uuid, agent_name) {
+  const { data: existing } = await supabase
+    .from("user_agents")
+    .select("id")
+    .eq("user_uuid", user_uuid)
+    .eq("agent_name", agent_name)
+    .maybeSingle();
+  if (existing) return existing;
+  const { data } = await supabase
+    .from("user_agents")
+    .insert([{
+      user_uuid,
+      client_uuid: MESH_WAVE_UUID,
+      agent_name
+    }])
+    .select()
+    .maybeSingle();
   return data;
 }
 
@@ -528,7 +570,7 @@ async function insertTask() {
   const payloads = urls.map(url => ({
     user_name: USER.user_name,
     agente: agentName,
-    full_url: url,
+    url: url,
     session_user_id: USER.id,
     user_uuid: USER.id,
     slug: extractSlugFromUrl(url),
@@ -1037,12 +1079,17 @@ async function testDatabaseConnection() {
       if (config.host.startsWith("db.")) {
         apiUrl = "https://" + config.host.substring(3);
       } else if (config.host.includes("pooler.supabase.com")) {
-        // Formato pooler: aws-0-sa-east-1.pooler.supabase.com
-        // Aqui não dá pra inferir o project ref facilmente sem o username
+        // Formato pooler: aws-1-us-east-1.pooler.supabase.com
         // O username geralmente é postgres.[project-ref]
         const parts = config.user.split(".");
         if (parts.length > 1) {
           apiUrl = `https://${parts[1]}.supabase.co`;
+        } else {
+          // Fallback: tentar extrair do hostname se for o formato antigo/alternativo
+          const hostParts = config.host.split(".");
+          if (hostParts.length > 0 && hostParts[0].includes("-")) {
+             // Alguns poolers tem o project ref no host, mas o padrão é no user
+          }
         }
       }
     }
@@ -1212,6 +1259,7 @@ window.setFileLLMFilter = setFileLLMFilter;
 window.setFileSlugFilter = setFileSlugFilter;
 window.migrateTasksToUserDB = migrateTasksToUserDB;
 window.ensureOriginProviderInUserDB = ensureOriginProviderInUserDB;
+window.ensureAgentFallback = ensureAgentFallback;
 
 // ======================
 // INITIALIZATION

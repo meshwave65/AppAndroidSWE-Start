@@ -42,6 +42,20 @@ export async function bootstrapUserWorkspace(url, key) {
           UNIQUE(user_uuid, origin_provider)
         );
       `
+    },
+    {
+      name: 'user_agents',
+      sql: `
+        CREATE TABLE IF NOT EXISTS public.user_agents (
+          id bigserial not null,
+          client_uuid uuid not null,
+          user_uuid uuid not null,
+          agent_name text not null,
+          created_at timestamp with time zone null default now(),
+          constraint user_agents_pkey primary key (id),
+          constraint user_agents_unique unique (user_uuid, agent_name)
+        );
+      `
     }
   ];
 
