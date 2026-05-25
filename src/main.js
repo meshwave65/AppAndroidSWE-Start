@@ -890,6 +890,19 @@ async function saveUserConfig() {
   console.log("Configurações salvas localmente");
 }
 
+function clearUserConfig() {
+  if (confirm("Tem certeza que deseja limpar todas as configurações?")) {
+    USER_CONFIG = { database: null, storage: null };
+    localStorage.removeItem(CONFIG_STORAGE_KEY);
+    populateConfigFields();
+    updateConfigStatus();
+    showToast("Configurações limpas", "success");
+    // Reinicializar wizard
+    WIZARD_CURRENT_STEP = 1;
+    initializeWizard();
+  }
+}
+
 async function migrateTasksToUserDB() {
   if (!USER_CONFIG.database) {
     showToast("Configure o banco de dados primeiro", "error");
@@ -1123,6 +1136,378 @@ async function saveProfile() {
 }
 
 // ======================
+// WORKSPACE SETUP WIZARD
+// ======================
+let WIZARD_CURRENT_STEP = 1;
+const WIZARD_TOTAL_STEPS = 3;
+
+const WIZARD_STEPS = [
+  {
+    id: 1,
+    title: "Etapa 1: Informações do Supabase",
+    description: "Configure a URL do seu projeto Supabase e a chave de acesso (Anon Key).",
+    fields: [
+      { id: "wizard_storage_url", label: "URL do Projeto Supabase", type: "text", placeholder: "https://seu-projeto.supabase.co", required: true },
+      { id: "wizard_storage_key", label: "Supabase Anon Key", type: "password", placeholder: "Sua chave anon", required: true }
+    ]
+  },
+  {
+    id: 2,
+    title: "Etapa 2: Banco de Dados",
+    description: "Cole a Connection String (URI) do seu banco de dados PostgreSQL.",
+    fields: [
+      { id: "wizard_db_uri", label: "Connection String (URI)", type: "textarea", placeholder: "postgresql://postgres.[project-id]:[PASSWORD]@aws-0-[region].pooler.supabase.com:5432/postgres", required: true },
+      { id: "wizard_db_pass", label: "Senha do Banco de Dados", type: "password", placeholder: "Sua senha", required: false }
+    ]
+  },
+  {
+    id: 3,
+    title: "Etapa 3: Resumo e Confirmação",
+    description: "Revise as configurações e confirme para criar seu workspace.",
+    fields: []
+  }
+];
+
+function initializeWizard() {
+  // Detectar se o usuário já tem configuração
+  if (USER_CONFIG.storage && USER_CONFIG.database) {
+    // Usuário já configurado, ocultar wizard
+    const wizardSection = document.getElementById("onboarding_section");
+    if (wizardSection) wizardSection.style.display = "none";
+  } else {
+    // Mostrar wizard
+    renderWizardStep();
+  }
+}
+
+function renderWizardStep() {
+  const step = WIZARD_STEPS[WIZARD_CURRENT_STEP - 1];
+  const container = document.getElementById("wizard_content");
+  if (!container) return;
+
+  // Atualizar contador
+  const counter = document.getElementById("wizard_step_counter");
+  if (counter) counter.textContent = `Etapa ${WIZARD_CURRENT_STEP}/${WIZARD_TOTAL_STEPS}`;
+
+  // Atualizar barra de progresso
+  const progressBar = document.getElementById("wizard_progress_bar");
+  if (progressBar) progressBar.style.width = `${(WIZARD_CURRENT_STEP / WIZARD_TOTAL_STEPS) * 100}%`;
+
+  // Atualizar botões
+  const prevBtn = document.getElementById("wizard_prev_btn");
+  const nextBtn = document.getElementById("wizard_next_btn");
+  if (prevBtn) prevBtn.style.display = WIZARD_CURRENT_STEP > 1 ? "block" : "none";
+  if (nextBtn) nextBtn.textContent = WIZARD_CURRENT_STEP === WIZARD_TOTAL_STEPS ? "✅ Concluir" : "Próximo →";
+
+  // Limpar container
+  container.innerHTML = "";
+
+  // Adicionar título e descrição
+  const header = document.createElement("div");
+  header.style.marginBottom = "20px";
+  header.innerHTML = `
+    <h3 style="margin: 0 0 8px 0; color: var(--primary);">${step.title}</h3>
+    <p style="margin: 0; font-size: 12px; color: var(--muted);">${step.description}</p>
+  `;
+  container.appendChild(header);
+
+  // Adicionar campos
+  if (step.fields.length > 0) {
+    const form = document.createElement("form");
+    form.onsubmit = (e) => { e.preventDefault(); wizardNextStep(); };
+
+    step.fields.forEach(field => {
+      const group = document.createElement("div");
+      group.className = "form-group";
+
+      const label = document.createElement("label");
+      label.htmlFor = field.id;
+      label.textContent = field.label;
+      group.appendChild(label);
+
+      let input;
+      if (field.type === "textarea") {
+        input = document.createElement("textarea");
+        input.rows = 3;
+      } else {
+        input = document.createElement("input");
+        input.type = field.type;
+      }
+      input.id = field.id;
+      input.placeholder = field.placeholder;
+      if (field.required) input.required = true;
+
+      // Pré-preencher com valores salvos
+      if (WIZARD_CURRENT_STEP === 1) {
+        if (field.id === "wizard_storage_url" && USER_CONFIG.storage) {
+          input.value = USER_CONFIG.storage.url || "";
+        } else if (field.id === "wizard_storage_key" && USER_CONFIG.storage) {
+          input.value = USER_CONFIG.storage.key || "";
+        }
+      } else if (WIZARD_CURRENT_STEP === 2) {
+        if (field.id === "wizard_db_uri" && USER_CONFIG.database) {
+          input.value = USER_CONFIG.database.uri || "";
+        } else if (field.id === "wizard_db_pass" && USER_CONFIG.database) {
+          input.value = USER_CONFIG.database.pass || "";
+        }
+      }
+
+      group.appendChild(input);
+      form.appendChild(group);
+    });
+
+    container.appendChild(form);
+  } else if (WIZARD_CURRENT_STEP === 3) {
+    // Etapa de resumo
+    const summary = document.createElement("div");
+    summary.style.background = "#1a2332";
+    summary.style.padding = "15px";
+    summary.style.borderRadius = "8px";
+    summary.style.fontSize = "12px";
+
+    let summaryHTML = "<h4 style='margin-top: 0;'>Resumo da Configuração:</h4>";
+
+    if (USER_CONFIG.storage) {
+      summaryHTML += `
+        <p><strong>Supabase URL:</strong></p>
+        <p style="margin: 5px 0 10px 0; color: var(--primary); word-break: break-all;">${USER_CONFIG.storage.url}</p>
+      `;
+    }
+
+    if (USER_CONFIG.database) {
+      summaryHTML += `
+        <p><strong>Banco de Dados:</strong></p>
+        <p style="margin: 5px 0 10px 0; color: var(--primary); word-break: break-all;">${USER_CONFIG.database.uri}</p>
+      `;
+    }
+
+    summaryHTML += `
+      <p style="margin-top: 15px; color: var(--muted); font-size: 11px;">
+        ✅ Clique em <strong>Concluir</strong> para salvar e criar as tabelas automaticamente.
+      </p>
+    `;
+
+    summary.innerHTML = summaryHTML;
+    container.appendChild(summary);
+  }
+}
+
+function wizardNextStep() {
+  // Validar e salvar dados da etapa atual
+  if (WIZARD_CURRENT_STEP === 1) {
+    const url = document.getElementById("wizard_storage_url")?.value?.trim();
+    const key = document.getElementById("wizard_storage_key")?.value?.trim();
+
+    if (!url || !key) {
+      showMessage("wizard_msg", "Preencha todos os campos obrigatórios", "error");
+      return;
+    }
+
+    // Normalizar URL
+    let finalUrl = url;
+    if (finalUrl.startsWith("db.")) finalUrl = finalUrl.substring(3);
+    if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) finalUrl = "https://" + finalUrl;
+
+    USER_CONFIG.storage = { url: finalUrl, key };
+    showMessage("wizard_msg", "", "");
+  } else if (WIZARD_CURRENT_STEP === 2) {
+    const uri = document.getElementById("wizard_db_uri")?.value?.trim();
+    const pass = document.getElementById("wizard_db_pass")?.value || "";
+
+    if (!uri) {
+      showMessage("wizard_msg", "Cole a Connection String", "error");
+      return;
+    }
+
+    const parsed = parseDatabaseURI(uri, pass);
+    if (!parsed) {
+      showMessage("wizard_msg", "Connection String inválida", "error");
+      return;
+    }
+
+    USER_CONFIG.database = parsed;
+    showMessage("wizard_msg", "", "");
+  } else if (WIZARD_CURRENT_STEP === 3) {
+    // Concluir wizard
+    completeWizard();
+    return;
+  }
+
+  if (WIZARD_CURRENT_STEP < WIZARD_TOTAL_STEPS) {
+    WIZARD_CURRENT_STEP++;
+    renderWizardStep();
+  }
+}
+
+function wizardPrevStep() {
+  if (WIZARD_CURRENT_STEP > 1) {
+    WIZARD_CURRENT_STEP--;
+    renderWizardStep();
+  }
+}
+
+function skipWizard() {
+  const wizardSection = document.getElementById("onboarding_section");
+  if (wizardSection) wizardSection.style.display = "none";
+  showToast("Wizard pulado. Você pode configurar manualmente abaixo.", "info");
+}
+
+async function completeWizard() {
+  showMessage("wizard_msg", "Salvando configurações...", "info");
+
+  try {
+    // Salvar configurações
+    await saveUserConfig();
+    updateConfigStatus();
+
+    showMessage("wizard_msg", "✅ Configurações salvas! Testando conexões...", "success");
+
+    // Testar conexões
+    const { createClient } = await import("./lib/supabase.js");
+    const testClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
+
+    const { error: storageError } = await testClient.storage.from("sofia_storage_user").list("", { limit: 1 });
+    const { error: dbError } = await testClient.from("appsofia_tasks").select("id").limit(1);
+
+    // Mostrar status do bootstrap
+    const bootstrapSection = document.getElementById("bootstrap_section");
+    if (bootstrapSection) {
+      bootstrapSection.style.display = "block";
+      await checkTableStatus();
+    }
+
+    // Ocultar wizard
+    const wizardSection = document.getElementById("onboarding_section");
+    if (wizardSection) wizardSection.style.display = "none";
+
+    showToast("✅ Setup concluído! Próximo passo: criar as tabelas.", "success");
+  } catch (error) {
+    showMessage("wizard_msg", `❌ Erro: ${error.message}`, "error");
+  }
+}
+
+// ======================
+// TABLE BOOTSTRAP
+// ======================
+async function checkTableStatus() {
+  if (!USER_CONFIG.storage) {
+    showMessage("bootstrap_msg", "Configure o Storage primeiro", "error");
+    return;
+  }
+
+  const statusDiv = document.getElementById("bootstrap_tables_status");
+  if (statusDiv) statusDiv.innerHTML = "<p>⏳ Verificando tabelas...</p>";
+
+  try {
+    const { createClient } = await import("./lib/supabase.js");
+    const testClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
+
+    const tables = ["appsofia_tasks", "user_origin_providers", "user_agents"];
+    let statusHTML = "";
+    let allOk = true;
+
+    for (const table of tables) {
+      const { error } = await testClient.from(table).select("id").limit(1);
+      if (error && (error.code === "PGRST116" || error.message.includes("does not exist"))) {
+        statusHTML += `<p>🔴 ${table}: Não encontrada</p>`;
+        allOk = false;
+      } else if (error) {
+        statusHTML += `<p>⚠️ ${table}: ${error.message}</p>`;
+        allOk = false;
+      } else {
+        statusHTML += `<p>🟢 ${table}: OK</p>`;
+      }
+    }
+
+    if (statusDiv) statusDiv.innerHTML = statusHTML;
+
+    if (allOk) {
+      showMessage("bootstrap_msg", "✅ Todas as tabelas estão criadas!", "success");
+    } else {
+      showMessage("bootstrap_msg", "⚠️ Algumas tabelas estão faltando. Clique em 'Criar Tabelas' para criá-las.", "warning");
+    }
+  } catch (error) {
+    if (statusDiv) statusDiv.innerHTML = `<p>❌ Erro: ${error.message}</p>`;
+    showMessage("bootstrap_msg", `❌ Erro ao verificar: ${error.message}`, "error");
+  }
+}
+
+async function bootstrapTables() {
+  if (!USER_CONFIG.storage) {
+    showMessage("bootstrap_msg", "Configure o Storage primeiro", "error");
+    return;
+  }
+
+  showMessage("bootstrap_msg", "⏳ Criando tabelas...", "info");
+
+  try {
+    const { createClient } = await import("./lib/supabase.js");
+    const testClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
+
+    // Tentar criar as tabelas (nota: Supabase JS não permite executar SQL arbitrário)
+    // Portanto, apenas informamos ao usuário que ele precisa executar manualmente
+    const sqlScript = `
+-- Criar tabela de tarefas
+CREATE TABLE IF NOT EXISTS public.appsofia_tasks (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  user_name text,
+  client_uuid uuid,
+  session_user_id uuid,
+  user_uuid uuid,
+  full_url text,
+  slug text,
+  origin_provider text,
+  agente text,
+  status text DEFAULT 'STAGED',
+  extractor_status text DEFAULT 'STAGED',
+  downloader_status text DEFAULT 'STAGED',
+  metadata jsonb DEFAULT '{}'::jsonb
+);
+
+-- Criar tabela de providers
+CREATE TABLE IF NOT EXISTS public.user_origin_providers (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  user_uuid uuid,
+  client_uuid uuid,
+  origin_provider text,
+  UNIQUE(user_uuid, origin_provider)
+);
+
+-- Criar tabela de agentes
+CREATE TABLE IF NOT EXISTS public.user_agents (
+  id bigserial not null,
+  client_uuid uuid not null,
+  user_uuid uuid not null,
+  agent_name text not null,
+  created_at timestamp with time zone null default now(),
+  constraint user_agents_pkey primary key (id),
+  constraint user_agents_unique unique (user_uuid, agent_name)
+);
+    `;
+
+    // Copiar SQL para clipboard
+    const textarea = document.createElement("textarea");
+    textarea.value = sqlScript;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
+
+    showMessage("bootstrap_msg", "📋 SQL copiado! Abra o SQL Editor do seu Supabase e cole o script para criar as tabelas.", "info");
+    showToast("SQL copiado para a área de transferência!", "success");
+
+    // Aguardar um pouco e verificar status
+    setTimeout(() => {
+      checkTableStatus();
+    }, 2000);
+  } catch (error) {
+    showMessage("bootstrap_msg", `❌ Erro: ${error.message}`, "error");
+  }
+}
+
+// ======================
 // WINDOW EXPORTS
 // ======================
 window.showTab = showTab;
@@ -1151,6 +1536,12 @@ window.setFileLLMFilter = setFileLLMFilter;
 window.setFileSlugFilter = setFileSlugFilter;
 window.migrateTasksToUserDB = migrateTasksToUserDB;
 window.ensureOriginProviderInUserDB = ensureOriginProviderInUserDB;
+window.clearUserConfig = clearUserConfig;
+window.wizardNextStep = wizardNextStep;
+window.wizardPrevStep = wizardPrevStep;
+window.skipWizard = skipWizard;
+window.checkTableStatus = checkTableStatus;
+window.bootstrapTables = bootstrapTables;
 
 // ======================
 // INITIALIZATION
@@ -1161,12 +1552,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Carregar config local o mais rápido possível (antes mesmo do login)
   await loadUserConfig();
   
+  // Inicializar wizard se necessário
+  initializeWizard();
+  
   await restoreSession();
 
   if (SESSION.logged) {
     await loadAgentsAndLLMs();
     // Recarregar para sincronizar com a nuvem se logado
     await loadUserConfig();
+    // Reinicializar wizard após login
+    initializeWizard();
   }
 });
 
