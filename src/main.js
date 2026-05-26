@@ -1495,13 +1495,53 @@ CREATE TABLE IF NOT EXISTS public.user_agents (
     document.execCommand("copy");
     document.body.removeChild(textarea);
 
-    showMessage("bootstrap_msg", "📋 SQL copiado! Abra o SQL Editor do seu Supabase e cole o script para criar as tabelas.", "info");
-    showToast("SQL copiado para a área de transferência!", "success");
+    // 1. Tentar criar o bucket de storage automaticamente
+    try {
+      const { data: bucket, error: bucketError } = await testClient.storage.createBucket('sofia_storage_user', {
+        public: true,
+        fileSizeLimit: 52428800, // 50MB
+        allowedMimeTypes: ['image/*', 'text/*', 'application/pdf', 'application/json']
+      });
+      
+      if (bucketError && bucketError.message.includes("already exists")) {
+        console.log("Bucket já existe.");
+      } else if (bucketError) {
+        console.warn("Erro ao criar bucket automaticamente:", bucketError.message);
+      } else {
+        console.log("Bucket criado com sucesso!");
+      }
+    } catch (e) {
+      console.warn("Erro na tentativa de criar bucket:", e);
+    }
+
+    // 2. Gerar link direto para o SQL Editor
+    let sqlEditorUrl = "https://supabase.com/dashboard/project/_/sql/new";
+    if (USER_CONFIG.storage && USER_CONFIG.storage.url) {
+      const projectId = USER_CONFIG.storage.url.split("//")[1].split(".")[0];
+      if (projectId) {
+        sqlEditorUrl = `https://supabase.com/dashboard/project/${projectId}/sql/new`;
+      }
+    }
+
+    // 3. Atualizar UI com link e instrução
+    const msgDiv = document.getElementById("bootstrap_msg");
+    if (msgDiv) {
+      msgDiv.innerHTML = `
+        <div style="background: #1a3a3a; padding: 15px; border-radius: 8px; border: 1px solid var(--primary); margin-top: 10px;">
+          <p style="margin-top: 0;">✅ <strong>SQL Copiado!</strong></p>
+          <p style="font-size: 11px;">O bucket de storage foi solicitado. Agora, clique no botão abaixo para abrir o editor SQL do seu projeto, cole o código (Ctrl+V) e clique em <strong>Run</strong>.</p>
+          <a href="${sqlEditorUrl}" target="_blank" class="btn btn-primary btn-block" style="text-decoration: none; text-align: center; display: block; margin-top: 10px;">🚀 Abrir SQL Editor no Supabase</a>
+        </div>
+      `;
+      msgDiv.className = "message show info";
+    }
+    
+    showToast("SQL copiado! Siga as instruções na tela.", "success");
 
     // Aguardar um pouco e verificar status
     setTimeout(() => {
       checkTableStatus();
-    }, 2000);
+    }, 5000);
   } catch (error) {
     showMessage("bootstrap_msg", `❌ Erro: ${error.message}`, "error");
   }
