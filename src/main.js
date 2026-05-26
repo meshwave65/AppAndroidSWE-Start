@@ -359,7 +359,7 @@ async function restoreSession() {
 // ======================
 async function loadAgentsAndLLMs() {
   if (!SESSION.logged) return;
-  const { data: agentsData } = await supabase.from("user_agents").select("agent_name").order("agent_name", { ascending: true });
+  const { data: agentsData } = await supabase.from("user_agents").select("agent_name").eq("user_uuid", USER.id).order("agent_name", { ascending: true });
   AGENTS = agentsData || [];
   
   const agentSelects = [
@@ -387,7 +387,7 @@ async function loadAgentsAndLLMs() {
     if (current) select.value = current;
   });
 
-  const { data: llmData } = await supabase.from("user_origin_providers").select("origin_provider").order("origin_provider", { ascending: true });
+  const { data: llmData } = await supabase.from("user_origin_providers").select("origin_provider").eq("user_uuid", USER.id).order("origin_provider", { ascending: true });
   LLM_PROVIDERS = llmData || [];
   const llmSelects = [
     document.getElementById("filter_llm"),
@@ -588,7 +588,7 @@ window.setFileSlugFilter = (val) => {
 // ======================
 async function loadFiles() {
   if (!SESSION.logged) return;
-  const url = `${API_BASE_URL}/files?user_name=${USER.user_name}&client_id=${MESH_WAVE_UUID}`;
+  const url = `${API_BASE_URL}/files?user_uuid=${USER.id}&user_name=${USER.user_name}&client_id=${MESH_WAVE_UUID}`;
   try {
     const res = await fetch(url);
     const json = await res.json();
@@ -736,7 +736,7 @@ async function performSearch() {
   if (container) container.innerHTML = "Buscando...";
 
   try {
-    const url = `${API_BASE_URL}/search?q=${encodeURIComponent(query)}&mode=${SEARCH_MODE}&match=${SEARCH_MATCH_MODE}&user_name=${USER.user_name}&client_id=${MESH_WAVE_UUID}`;
+    const url = `${API_BASE_URL}/search?q=${encodeURIComponent(query)}&mode=${SEARCH_MODE}&match=${SEARCH_MATCH_MODE}&user_uuid=${USER.id}&user_name=${USER.user_name}&client_id=${MESH_WAVE_UUID}`;
     const res = await fetch(url);
     const json = await res.json();
     SEARCH_RESULTS = json.results || [];
