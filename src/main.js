@@ -247,6 +247,9 @@ async function login() {
     email: client.email
   };
   
+  // ✅ Carregar configurações APÓS setar USER.id
+  await loadUserConfig();
+  
   if (document.getElementById("p_username")) document.getElementById("p_username").value = USER.user_name;
   if (document.getElementById("p_name")) document.getElementById("p_name").value = USER.full_name || "";
   if (document.getElementById("p_email")) document.getElementById("p_email").value = USER.email || "";
@@ -338,6 +341,9 @@ async function restoreSession() {
       full_name: client.full_name,
       email: client.email
     };
+
+    // ✅ Carregar configurações APÓS setar USER.id
+    await loadUserConfig();
 
     updateUserDisplay();
     await loadAgentsAndLLMs();
@@ -769,6 +775,11 @@ function renderSearchResults() {
 // ======================
 const CONFIG_STORAGE_KEY = "sofia_user_config";
 
+function getConfigStorageKey(userId) {
+  if (!userId) return CONFIG_STORAGE_KEY; // Fallback
+  return `sofia_user_config_${userId}`;
+}
+
 let USER_CONFIG = {
   database: null,
   storage: null
@@ -777,12 +788,18 @@ let USER_CONFIG = {
 async function loadUserConfig() {
   // Carregar do localStorage (Persistência Local)
   // O usuário solicitou que os dados fiquem no lado dele, não no nosso DB
-  const localData = localStorage.getItem(CONFIG_STORAGE_KEY);
+  if (!USER.id) {
+    console.warn("USER.id not set, skipping config load");
+    return;
+  }
+  
+  const storageKey = getConfigStorageKey(USER.id);
+  const localData = localStorage.getItem(storageKey);
   if (localData) {
     try {
       const parsed = JSON.parse(localData);
       USER_CONFIG = { ...USER_CONFIG, ...parsed };
-      console.log("Configurações carregadas localmente:", USER_CONFIG);
+      console.log(`Configurações carregadas para ${USER.user_name}:`, USER_CONFIG);
     } catch (e) {
       console.error("Erro ao ler config local:", e);
     }
@@ -886,14 +903,26 @@ async function saveStorageConfig() {
 async function saveUserConfig() {
   // Salvar localmente apenas, conforme solicitado pelo usuário
   // Isso garante privacidade e que não temos acesso às credenciais do DB do usuário
-  localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(USER_CONFIG));
-  console.log("Configurações salvas localmente");
+  if (!USER.id) {
+    console.warn("USER.id not set, cannot save config");
+    return;
+  }
+  
+  const storageKey = getConfigStorageKey(USER.id);
+  localStorage.setItem(storageKey, JSON.stringify(USER_CONFIG));
+  console.log(`Configurações salvas para ${USER.user_name}`);
 }
 
 function clearUserConfig() {
+  if (!USER.id) {
+    showToast("Nenhum usuário logado", "error");
+    return;
+  }
+  
   if (confirm("Tem certeza que deseja limpar todas as configurações?")) {
     USER_CONFIG = { database: null, storage: null };
-    localStorage.removeItem(CONFIG_STORAGE_KEY);
+    const storageKey = getConfigStorageKey(USER.id);
+    localStorage.removeItem(storageKey);
     populateConfigFields();
     updateConfigStatus();
     showToast("Configurações limpas", "success");
