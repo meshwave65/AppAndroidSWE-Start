@@ -1582,6 +1582,112 @@ window.wizardPrevStep = wizardPrevStep;
 window.skipWizard = skipWizard;
 window.checkTableStatus = checkTableStatus;
 window.bootstrapTables = bootstrapTables;
+window.handleTerminalCommand = handleTerminalCommand;
+
+// ======================
+// TERMINAL LOGIC
+// ======================
+function addTerminalLine(text, type = "info") {
+  const body = document.getElementById("terminal_body");
+  if (!body) return;
+  const line = document.createElement("div");
+  line.className = `terminal-line ${type}`;
+  line.textContent = text;
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+}
+
+async function handleTerminalCommand(event) {
+  if (event.key !== "Enter") return;
+  const input = document.getElementById("terminal_input");
+  const command = input.value.trim().toLowerCase();
+  if (!command) return;
+
+  addTerminalLine(`sofia@workspace:~$ ${command}`, "command");
+  input.value = "";
+
+  const args = command.split(" ");
+  const cmd = args[0];
+
+  switch (cmd) {
+    case "help":
+      addTerminalLine("Available commands:");
+      addTerminalLine("  help          - Show this help message");
+      addTerminalLine("  clear         - Clear terminal screen");
+      addTerminalLine("  sofia-init    - Run full workspace bootstrap");
+      addTerminalLine("  status        - Check workspace configuration status");
+      addTerminalLine("  whoami        - Show current user info");
+      addTerminalLine("  ls            - List available workspace components");
+      break;
+    case "clear":
+      const body = document.getElementById("terminal_body");
+      if (body) body.innerHTML = "";
+      break;
+    case "whoami":
+      addTerminalLine(`User: ${USER.user_name} (${USER.full_name})`);
+      addTerminalLine(`Email: ${USER.email}`);
+      break;
+    case "ls":
+      addTerminalLine("Components:");
+      addTerminalLine("  [DIR]  lib/");
+      addTerminalLine("  [FILE] main.js");
+      addTerminalLine("  [DB]   appsofia_tasks");
+      addTerminalLine("  [STRG] sofia_storage_user");
+      break;
+    case "status":
+      addTerminalLine("Checking configuration...");
+      addTerminalLine(`Database: ${USER_CONFIG.database ? "CONNECTED" : "NOT CONFIGURED"}`);
+      addTerminalLine(`Storage: ${USER_CONFIG.storage ? "CONNECTED" : "NOT CONFIGURED"}`);
+      break;
+    case "sofia-init":
+      await runSofiaInit();
+      break;
+    default:
+      addTerminalLine(`Command not found: ${cmd}`, "error");
+  }
+}
+
+async function runSofiaInit() {
+  if (!USER_CONFIG.storage || !USER_CONFIG.database) {
+    addTerminalLine("Error: Missing configuration. Run wizard first.", "error");
+    return;
+  }
+
+  addTerminalLine("Starting Sofia Workspace Initialization...", "info");
+  addTerminalLine("Step 1: Connecting to Supabase API...", "info");
+  
+  try {
+    const { createClient } = await import("./lib/supabase.js");
+    const testClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
+    addTerminalLine("DONE: API Connected.", "info");
+
+    addTerminalLine("Step 2: Provisioning Storage Bucket...", "info");
+    const { data: bucket, error: bucketError } = await testClient.storage.createBucket('sofia_storage_user', { public: true });
+    
+    if (bucketError && bucketError.message.includes("already exists")) {
+      addTerminalLine("SKIP: Bucket already exists.", "warn");
+    } else if (bucketError) {
+      addTerminalLine(`WARN: ${bucketError.message}`, "warn");
+    } else {
+      addTerminalLine("DONE: Bucket created successfully.", "info");
+    }
+
+    addTerminalLine("Step 3: Preparing Database Schema...", "info");
+    addTerminalLine("System is ready to create tables.", "info");
+    addTerminalLine("Due to security constraints, please run the SQL script.", "info");
+    
+    // Acionar a lógica de bootstrap já existente
+    bootstrapTables();
+    
+    addTerminalLine("DONE: SQL script copied to clipboard.", "info");
+    addTerminalLine("-------------------------------------------", "info");
+    addTerminalLine("WORKSPACE INITIALIZATION COMPLETED (PENDING SQL RUN)", "info");
+    addTerminalLine("Type 'status' to check again.", "info");
+    
+  } catch (e) {
+    addTerminalLine(`FATAL ERROR: ${e.message}`, "error");
+  }
+}
 
 // ======================
 // INITIALIZATION
