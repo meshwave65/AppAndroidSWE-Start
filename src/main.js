@@ -100,9 +100,16 @@ function extractOriginProvider(url = "") {
 }
 
 function getStatusIcon(status) {
-  const s = (status || "").toUpperCase();
-  if (s === "STAGED") return "📦";
-  if (s === "DONE") return "🏁";
+  const s = (status || "").toString().toUpperCase();
+  // Novos status (IDs ou Nomes)
+  if (s === "100" || s === "STAGED") return "📦";
+  if (s === "110" || s === "PROGRESS") return "⚙️";
+  if (s === "120" || s === "PAUSED") return "⏸️";
+  if (s === "130" || s === "DONE") return "🏁";
+  if (s === "200" || s === "FAIL") return "🚨";
+  if (s === "9") return "💬"; // Pergunta respondida
+  
+  // Legado
   if (s === "DELETED") return "🗑️";
   if (s === "PROCESS" || s === "PROCESSING") return "⚙️";
   if (s === "FAIL" || s === "FAILED") return "🚨";
@@ -111,12 +118,13 @@ function getStatusIcon(status) {
 }
 
 function getStatusClass(status) {
-  const s = (status || "").toUpperCase();
-  if (s === "STAGED") return "status-staged";
-  if (s === "PROCESS" || s === "PROCESSING") return "status-process";
-  if (s === "DONE") return "status-done";
-  if (s === "FAIL" || s === "FAILED") return "status-fail";
-  if (s === "PAUSE" || s === "PAUSED") return "status-pause";
+  const s = (status || "").toString().toUpperCase();
+  if (s === "100" || s === "STAGED") return "status-staged";
+  if (s === "110" || s === "PROGRESS" || s === "PROCESS" || s === "PROCESSING") return "status-process";
+  if (s === "130" || s === "DONE") return "status-done";
+  if (s === "200" || s === "FAIL" || s === "FAILED") return "status-fail";
+  if (s === "120" || s === "PAUSED" || s === "PAUSE") return "status-pause";
+  if (s === "9") return "status-staged"; // Status 9 é informativo
   return "status-staged";
 }
 
@@ -255,6 +263,10 @@ async function login() {
   if (document.getElementById("p_email")) document.getElementById("p_email").value = USER.email || "";
   
   updateUserDisplay();
+  
+  // RECARREGAR CONFIGURAÇÃO ESPECÍFICA DO USUÁRIO LOGADO
+  await loadUserConfig();
+  
   showToast("Login realizado com sucesso!", "success");
   showTab(3);
   await loadAgentsAndLLMs();
@@ -346,6 +358,10 @@ async function restoreSession() {
     await loadUserConfig();
 
     updateUserDisplay();
+    
+    // RECARREGAR CONFIGURAÇÃO ESPECÍFICA DO USUÁRIO RESTAURADO
+    await loadUserConfig();
+    
     await loadAgentsAndLLMs();
     await loadTasks();
     await loadFiles();
@@ -1724,20 +1740,19 @@ async function runSofiaInit() {
 document.addEventListener("DOMContentLoaded", async () => {
   showTab(1);
   
-  // Carregar config local o mais rápido possível (antes mesmo do login)
+  // 1. Tentar restaurar sessão primeiro para saber quem é o usuário
+  await restoreSession();
+  
+  // 2. Carregar config local específica do usuário (ou guest se não logado)
   await loadUserConfig();
   
-  // Inicializar wizard se necessário
-  initializeWizard();
-  
-  await restoreSession();
+  // 3. Inicializar wizard se necessário
+  if (typeof initializeWizard === 'function') {
+    initializeWizard();
+  }
 
   if (SESSION.logged) {
     await loadAgentsAndLLMs();
-    // Recarregar para sincronizar com a nuvem se logado
-    await loadUserConfig();
-    // Reinicializar wizard após login
-    initializeWizard();
   }
 });
 
