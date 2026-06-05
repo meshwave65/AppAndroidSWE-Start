@@ -252,15 +252,29 @@ input:focus, select:focus, textarea:focus {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 12px;
   transition: var(--transition);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
 .task-card:active {
   background: var(--surface-light);
+  transform: translateY(1px);
+}
+
+.task-status-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
 }
 
 .task-status {

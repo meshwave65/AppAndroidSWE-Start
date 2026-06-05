@@ -463,15 +463,32 @@ function renderTasks() {
     card.className = "task-card";
     const extStatus = t.extractor_status || t.status || "STAGED";
     const dwnStatus = t.downloader_status || t.status || "STAGED";
+    
+    // Obter nomes amigáveis para os status se forem numéricos
+    const getStatusName = (s) => {
+      if (s === "100") return "STAGED";
+      if (s === "110") return "PROGRESS";
+      if (s === "120") return "PAUSED";
+      if (s === "130") return "DONE";
+      if (s === "200") return "FAIL";
+      if (s === "9") return "RESPONDIDA";
+      return s;
+    };
+
     card.innerHTML = `
-      <input type="checkbox" class="task-checkbox" onchange="toggleTaskSelection('${t.id}', this)">
-      <div class="task-status">${getStatusIcon(extStatus)}</div>
-      <div class="task-info">
-        <div class="task-id">${t.id}</div>
-        <div class="task-url">${t.full_url}</div>
+      <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+        <input type="checkbox" class="task-checkbox" onchange="toggleTaskSelection('${t.id}', this)" style="width: 18px; height: 18px; flex-shrink: 0;">
+        <div class="task-status" style="flex-shrink: 0;">${getStatusIcon(extStatus)}</div>
+        <div class="task-info" style="flex: 1; min-width: 0;">
+          <div class="task-id" style="font-size: 9px; opacity: 0.6; margin-bottom: 2px;">ID: ${t.id.substring(0,8)}...</div>
+          <div class="task-url" style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text);">${t.full_url}</div>
+          <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+            <span class="task-status-badge ${getStatusClass(extStatus)}">EXT: ${getStatusName(extStatus)}</span>
+            <span class="task-status-badge ${getStatusClass(dwnStatus)}">DWN: ${getStatusName(dwnStatus)}</span>
+            ${t.agente ? `<span style="font-size: 9px; background: var(--surface-light); padding: 2px 6px; border-radius: 4px; color: var(--accent); border: 1px solid var(--border);">🤖 ${t.agente}</span>` : ''}
+          </div>
+        </div>
       </div>
-      <div class="task-status-badge ${getStatusClass(extStatus)}">${extStatus}</div>
-      <div class="task-status-badge ${getStatusClass(dwnStatus)}">${dwnStatus}</div>
     `;
     container.appendChild(card);
   });
