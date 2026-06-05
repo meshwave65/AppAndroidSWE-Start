@@ -25,7 +25,7 @@
 <!-- ================= HEADER ================= -->
 <header class="app-header">
   <div class="header-content">
-    <h1 class="app-title">Sofia Extractor</h1>
+    <h1 class="app-title">SOFIA <span style="color: var(--accent);">START</span></h1>
     <div class="user-display">
       <span id="headerUserName">Guest</span>
     </div>
@@ -478,12 +478,30 @@ CREATE TABLE IF NOT EXISTS user_agents (
 
 <!-- ================= BOTTOM NAVIGATION ================= -->
 <nav class="bottom-nav">
-  <button class="nav-btn" onclick="showTab(1)" title="Auth">🔑</button>
-  <button class="nav-btn" onclick="showTab(2)" title="Insert">➕</button>
-  <button class="nav-btn" onclick="showTab(3)" title="Tasks">📋</button>
-  <button class="nav-btn" onclick="showTab(4)" title="Files">📁</button>
-  <button class="nav-btn" onclick="showTab(5)" title="Search">🔍</button>
-  <button class="nav-btn" onclick="showTab(6)" title="Settings">⚙️</button>
+  <button class="nav-btn active" onclick="showTab(1)">
+    <span style="font-size: 18px;">🔑</span>
+    <span style="font-size: 9px; font-weight: 700; margin-top: 4px;">LOGIN</span>
+  </button>
+  <button class="nav-btn" onclick="showTab(2)">
+    <span style="font-size: 18px;">➕</span>
+    <span style="font-size: 9px; font-weight: 700; margin-top: 4px;">ADD</span>
+  </button>
+  <button class="nav-btn" onclick="showTab(3)">
+    <span style="font-size: 18px;">📋</span>
+    <span style="font-size: 9px; font-weight: 700; margin-top: 4px;">TASKS</span>
+  </button>
+  <button class="nav-btn" onclick="showTab(4)">
+    <span style="font-size: 18px;">📁</span>
+    <span style="font-size: 9px; font-weight: 700; margin-top: 4px;">FILES</span>
+  </button>
+  <button class="nav-btn" onclick="showTab(5)">
+    <span style="font-size: 18px;">🔍</span>
+    <span style="font-size: 9px; font-weight: 700; margin-top: 4px;">SEARCH</span>
+  </button>
+  <button class="nav-btn" onclick="showTab(6)">
+    <span style="font-size: 18px;">⚙️</span>
+    <span style="font-size: 9px; font-weight: 700; margin-top: 4px;">SETUP</span>
+  </button>
 </nav>
 
 <!-- ================= PREVIEW MODAL ================= -->

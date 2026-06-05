@@ -52,9 +52,14 @@ function showTab(n) {
   const el = document.getElementById("tab" + n);
   if (el) {
     el.classList.add("active");
-    document.querySelectorAll(".nav-btn").forEach(btn => btn.classList.remove("active"));
-    const navBtns = document.querySelectorAll(".nav-btn");
-    if (navBtns[n - 1]) navBtns[n - 1].classList.add("active");
+    // Update Nav Buttons
+    document.querySelectorAll(".nav-btn").forEach((btn, index) => {
+      if (index === n - 1) btn.classList.add("active");
+      else btn.classList.remove("active");
+    });
+    // Scroll to top of the main container when changing tabs
+    const main = document.querySelector(".app-main");
+    if (main) main.scrollTop = 0;
   }
 }
 
