@@ -544,3 +544,35 @@ input:focus, select:focus, textarea:focus {
 .message.info { background: var(--accent-glow); color: var(--accent); border: 1px solid var(--accent); }
 .message.success { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--success); }
 .message.error { background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid var(--error); }
+
+/* Circular Action Buttons */
+.btn-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(30, 41, 59, 0.5);
+  color: white;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.btn-circle:active {
+  transform: scale(0.9);
+}
+
+.btn-refresh { color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); }
+.btn-play { color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+.btn-pause { color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+.btn-stop { color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+.btn-delete { color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+
+.btn-circle:hover {
+  background: var(--surface-light);
+  box-shadow: 0 0 15px currentColor;
+}

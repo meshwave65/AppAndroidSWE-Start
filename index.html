@@ -103,12 +103,13 @@
   <div class="tab" id="tab3" data-tab="tasks">
     <div class="tab-content" style="padding: 10px;">
       
-      <!-- 2. ACTION BAR -->
-      <div class="action-bar" style="display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 4px;">
-        <button class="btn btn-primary" style="flex: 1; min-width: 90px; font-size: 10px; padding: 10px 4px;" onclick="loadTasks()">🔄 ATUALIZAR</button>
-        <button class="btn btn-secondary" style="flex: 1; min-width: 90px; font-size: 10px; padding: 10px 4px;" onclick="runAction('PLAY')">▶ INICIAR</button>
-        <button class="btn btn-secondary" style="flex: 1; min-width: 90px; font-size: 10px; padding: 10px 4px;" onclick="runAction('PAUSE')">⏸ PAUSAR</button>
-        <button class="btn btn-secondary" style="flex: 1; min-width: 90px; font-size: 10px; padding: 10px 4px;" onclick="deleteSelectedTasks()">🗑️ EXCLUIR</button>
+      <!-- 2. ACTION BAR (Circular Buttons) -->
+      <div class="action-bar" style="display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; padding: 10px 0;">
+        <button class="btn-circle btn-refresh" onclick="loadTasks()" title="Atualizar">⟳</button>
+        <button class="btn-circle btn-play" onclick="runAction('PLAY')" title="Iniciar">▶</button>
+        <button class="btn-circle btn-pause" onclick="runAction('PAUSE')" title="Pausar">⏸</button>
+        <button class="btn-circle btn-stop" onclick="runAction('STOP')" title="Parar">■</button>
+        <button class="btn-circle btn-delete" onclick="deleteSelectedTasks()" title="Excluir">🗑</button>
       </div>
 
       <!-- 3. FILTER BAR -->
