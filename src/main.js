@@ -455,44 +455,79 @@ function renderTasks() {
   if (!container) return;
   container.innerHTML = "";
   if (TASKS.length === 0) {
-    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">Nenhuma tarefa encontrada</div>';
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:12px;">Nenhuma tarefa encontrada</div>';
     return;
   }
+  
   TASKS.forEach(t => {
-    const card = document.createElement("div");
-    card.className = "task-card";
-    const extStatus = t.extractor_status || t.status || "STAGED";
-    const dwnStatus = t.downloader_status || t.status || "STAGED";
+    const row = document.createElement("div");
+    row.className = "task-row";
+    row.style.display = "grid";
+    row.style.gridTemplateColumns = "40px 40px 1fr 75px 75px";
+    row.style.gap = "8px";
+    row.style.padding = "12px 8px";
+    row.style.borderBottom = "1px solid var(--border)";
+    row.style.alignItems = "center";
+    row.style.transition = "background 0.2s";
+
+    const extStatus = t.extractor_status || t.status || "100";
+    const dwnStatus = t.downloader_status || t.status || "100";
     
-    // Obter nomes amigáveis para os status se forem numéricos
     const getStatusName = (s) => {
       if (s === "100") return "STAGED";
       if (s === "110") return "PROGRESS";
       if (s === "120") return "PAUSED";
       if (s === "130") return "DONE";
       if (s === "200") return "FAIL";
-      if (s === "9") return "RESPONDIDA";
+      if (s === "9") return "RESP";
       return s;
     };
 
-    card.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
-        <input type="checkbox" class="task-checkbox" onchange="toggleTaskSelection('${t.id}', this)" style="width: 18px; height: 18px; flex-shrink: 0;">
-        <div class="task-status" style="flex-shrink: 0;">${getStatusIcon(extStatus)}</div>
-        <div class="task-info" style="flex: 1; min-width: 0;">
-          <div class="task-id" style="font-size: 9px; opacity: 0.6; margin-bottom: 2px;">ID: ${t.id.substring(0,8)}...</div>
-          <div class="task-url" style="font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text);">${t.full_url}</div>
-          <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
-            <span class="task-status-badge ${getStatusClass(extStatus)}">EXT: ${getStatusName(extStatus)}</span>
-            <span class="task-status-badge ${getStatusClass(dwnStatus)}">DWN: ${getStatusName(dwnStatus)}</span>
-            ${t.agente ? `<span style="font-size: 9px; background: var(--surface-light); padding: 2px 6px; border-radius: 4px; color: var(--accent); border: 1px solid var(--border);">🤖 ${t.agente}</span>` : ''}
-          </div>
-        </div>
+    const isSelected = TASK_SELECTION.has(t.id);
+
+    row.innerHTML = `
+      <div style="display: flex; justify-content: center;">
+        <input type="checkbox" class="task-checkbox" onchange="toggleTaskSelection('${t.id}', this)" ${isSelected ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--accent);">
+      </div>
+      <div style="text-align: center; font-size: 16px;">${getStatusIcon(extStatus)}</div>
+      <div style="min-width: 0;">
+        <div style="font-size: 11px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${t.full_url}</div>
+        <div style="font-size: 8px; color: var(--text-muted); margin-top: 2px;">ID: ${t.id.substring(0,8)} | 🤖 ${t.agente || 'default'}</div>
+      </div>
+      <div style="text-align: center;">
+        <span class="task-status-badge ${getStatusClass(extStatus)}" style="font-size: 7px; padding: 2px 4px; width: 100%; justify-content: center;">${getStatusName(extStatus)}</span>
+      </div>
+      <div style="text-align: center;">
+        <span class="task-status-badge ${getStatusClass(dwnStatus)}" style="font-size: 7px; padding: 2px 4px; width: 100%; justify-content: center;">${getStatusName(dwnStatus)}</span>
       </div>
     `;
-    container.appendChild(card);
+    
+    row.onclick = (e) => {
+      if (e.target.type !== 'checkbox') {
+        const cb = row.querySelector('.task-checkbox');
+        cb.checked = !cb.checked;
+        toggleTaskSelection(t.id, cb);
+      }
+    };
+    
+    container.appendChild(row);
   });
 }
+
+function toggleSelectAll(cb) {
+  const checkboxes = document.querySelectorAll('.task-checkbox');
+  checkboxes.forEach(box => {
+    box.checked = cb.checked;
+    // Extrair o ID da tarefa do evento onchange ou buscar no elemento pai
+    // No nosso caso, o ID está no atributo onchange: toggleTaskSelection('ID', this)
+    const match = box.getAttribute('onchange').match(/'([^']+)'/);
+    if (match && match[1]) {
+      if (cb.checked) TASK_SELECTION.add(match[1]);
+      else TASK_SELECTION.delete(match[1]);
+    }
+  });
+}
+window.toggleSelectAll = toggleSelectAll;
 
 function toggleTaskSelection(id, cb) {
   if (cb.checked) TASK_SELECTION.add(id);

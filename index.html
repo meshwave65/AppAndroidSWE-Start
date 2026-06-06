@@ -101,34 +101,46 @@
 
   <!-- ================= TASKS TAB ================= -->
   <div class="tab" id="tab3" data-tab="tasks">
-    <div class="tab-content">
-      <h2>Gerenciador de Tarefas</h2>
-
-      <div class="task-toolbar">
-        <button class="btn-icon" onclick="smartRefresh()" title="Atualizar">⟳</button>
-        <button class="btn-icon" onclick="runAction('PLAY')" title="Executar">▶</button>
-        <button class="btn-icon" onclick="runAction('PAUSE')" title="Pausar">⏸</button>
-        <button class="btn-icon" onclick="runAction('STOP')" title="Parar">■</button>
-        <button class="btn-icon" onclick="runAction('DELETE')" title="Deletar">🗑</button>
+    <div class="tab-content" style="padding: 10px;">
+      
+      <!-- 2. ACTION BAR -->
+      <div class="action-bar" style="display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 4px;">
+        <button class="btn btn-primary" style="flex: 1; min-width: 90px; font-size: 10px; padding: 10px 4px;" onclick="loadTasks()">🔄 ATUALIZAR</button>
+        <button class="btn btn-secondary" style="flex: 1; min-width: 90px; font-size: 10px; padding: 10px 4px;" onclick="runAction('PLAY')">▶ INICIAR</button>
+        <button class="btn btn-secondary" style="flex: 1; min-width: 90px; font-size: 10px; padding: 10px 4px;" onclick="runAction('PAUSE')">⏸ PAUSAR</button>
+        <button class="btn btn-secondary" style="flex: 1; min-width: 90px; font-size: 10px; padding: 10px 4px;" onclick="deleteSelectedTasks()">🗑️ EXCLUIR</button>
       </div>
 
-      <div class="filters-section">
-        <select id="filter_agent" onchange="loadTasks()">
-          <option value="ALL">Todos os Agentes</option>
+      <!-- 3. FILTER BAR -->
+      <div class="filter-bar" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 12px;">
+        <select id="filter_agent" onchange="loadTasks()" style="font-size: 10px; padding: 6px; height: 34px;">
+          <option value="ALL">AGENTES</option>
         </select>
-        <select id="filter_llm" onchange="loadTasks()">
-          <option value="ALL">Todos os LLM</option>
+        <select id="filter_llm" onchange="loadTasks()" style="font-size: 10px; padding: 6px; height: 34px;">
+          <option value="ALL">LLM</option>
         </select>
-        <select id="filter_status" onchange="loadTasks()">
-          <option value="ALL">Todos os Status</option>
-          <option value="STAGED">STAGED</option>
-          <option value="PROCESS">PROCESS</option>
-          <option value="DONE">DONE</option>
-          <option value="FAIL">FAIL</option>
+        <select id="filter_status" onchange="loadTasks()" style="font-size: 10px; padding: 6px; height: 34px;">
+          <option value="ALL">STATUS</option>
+          <option value="100">STAGED</option>
+          <option value="110">PROGRESS</option>
+          <option value="120">PAUSED</option>
+          <option value="130">DONE</option>
+          <option value="200">FAIL</option>
+          <option value="9">RESPONDIDA</option>
         </select>
       </div>
 
-      <div id="tasks" class="tasks-list"></div>
+      <!-- 4. TASK TABLE HEADER (5 COLUMNS) -->
+      <div class="task-table-header" style="display: grid; grid-template-columns: 40px 40px 1fr 75px 75px; gap: 8px; padding: 12px 8px; background: var(--surface-light); border-radius: 8px 8px 0 0; border: 1px solid var(--border); font-size: 8px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; align-items: center; letter-spacing: 0.5px;">
+        <div style="display: flex; justify-content: center;"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)" style="width: 16px; height: 16px; accent-color: var(--accent);"></div>
+        <div style="text-align: center;">ST</div>
+        <div>TASK</div>
+        <div style="text-align: center;">EXTRACTOR</div>
+        <div style="text-align: center;">DOWNLOADER</div>
+      </div>
+
+      <!-- TASK TABLE BODY -->
+      <div id="tasks" class="tasks-list" style="border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; background: var(--surface); min-height: 300px;"></div>
     </div>
   </div>
 
