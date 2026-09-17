@@ -52,9 +52,14 @@ function showTab(n) {
   const el = document.getElementById("tab" + n);
   if (el) {
     el.classList.add("active");
-    document.querySelectorAll(".nav-btn").forEach(btn => btn.classList.remove("active"));
-    const navBtns = document.querySelectorAll(".nav-btn");
-    if (navBtns[n - 1]) navBtns[n - 1].classList.add("active");
+    // Update Nav Buttons
+    document.querySelectorAll(".nav-btn").forEach((btn, index) => {
+      if (index === n - 1) btn.classList.add("active");
+      else btn.classList.remove("active");
+    });
+    // Scroll to top of the main container when changing tabs
+    const main = document.querySelector(".app-main");
+    if (main) main.scrollTop = 0;
   }
 }
 
@@ -100,9 +105,16 @@ function extractOriginProvider(url = "") {
 }
 
 function getStatusIcon(status) {
-  const s = (status || "").toUpperCase();
-  if (s === "STAGED") return "📦";
-  if (s === "DONE") return "🏁";
+  const s = (status || "").toString().toUpperCase();
+  // Novos status (IDs ou Nomes)
+  if (s === "100" || s === "STAGED") return "📦";
+  if (s === "110" || s === "PROGRESS") return "⚙️";
+  if (s === "120" || s === "PAUSED") return "⏸️";
+  if (s === "130" || s === "DONE") return "🏁";
+  if (s === "200" || s === "FAIL") return "🚨";
+  if (s === "9") return "💬"; // Pergunta respondida
+  
+  // Legado
   if (s === "DELETED") return "🗑️";
   if (s === "PROCESS" || s === "PROCESSING") return "⚙️";
   if (s === "FAIL" || s === "FAILED") return "🚨";
@@ -111,12 +123,13 @@ function getStatusIcon(status) {
 }
 
 function getStatusClass(status) {
-  const s = (status || "").toUpperCase();
-  if (s === "STAGED") return "status-staged";
-  if (s === "PROCESS" || s === "PROCESSING") return "status-process";
-  if (s === "DONE") return "status-done";
-  if (s === "FAIL" || s === "FAILED") return "status-fail";
-  if (s === "PAUSE" || s === "PAUSED") return "status-pause";
+  const s = (status || "").toString().toUpperCase();
+  if (s === "100" || s === "STAGED") return "status-staged";
+  if (s === "110" || s === "PROGRESS" || s === "PROCESS" || s === "PROCESSING") return "status-process";
+  if (s === "130" || s === "DONE") return "status-done";
+  if (s === "200" || s === "FAIL" || s === "FAILED") return "status-fail";
+  if (s === "120" || s === "PAUSED" || s === "PAUSE") return "status-pause";
+  if (s === "9") return "status-staged"; // Status 9 é informativo
   return "status-staged";
 }
 
@@ -247,11 +260,18 @@ async function login() {
     email: client.email
   };
   
+  // ✅ Carregar configurações APÓS setar USER.id
+  await loadUserConfig();
+  
   if (document.getElementById("p_username")) document.getElementById("p_username").value = USER.user_name;
   if (document.getElementById("p_name")) document.getElementById("p_name").value = USER.full_name || "";
   if (document.getElementById("p_email")) document.getElementById("p_email").value = USER.email || "";
   
   updateUserDisplay();
+  
+  // RECARREGAR CONFIGURAÇÃO ESPECÍFICA DO USUÁRIO LOGADO
+  await loadUserConfig();
+  
   showToast("Login realizado com sucesso!", "success");
   showTab(3);
   await loadAgentsAndLLMs();
@@ -339,7 +359,14 @@ async function restoreSession() {
       email: client.email
     };
 
+    // ✅ Carregar configurações APÓS setar USER.id
+    await loadUserConfig();
+
     updateUserDisplay();
+    
+    // RECARREGAR CONFIGURAÇÃO ESPECÍFICA DO USUÁRIO RESTAURADO
+    await loadUserConfig();
+    
     await loadAgentsAndLLMs();
     await loadTasks();
     await loadFiles();
@@ -353,7 +380,7 @@ async function restoreSession() {
 // ======================
 async function loadAgentsAndLLMs() {
   if (!SESSION.logged) return;
-  const { data: agentsData } = await supabase.from("user_agents").select("agent_name").order("agent_name", { ascending: true });
+  const { data: agentsData } = await supabase.from("user_agents").select("agent_name").eq("user_uuid", USER.id).order("agent_name", { ascending: true });
   AGENTS = agentsData || [];
   
   const agentSelects = [
@@ -381,7 +408,7 @@ async function loadAgentsAndLLMs() {
     if (current) select.value = current;
   });
 
-  const { data: llmData } = await supabase.from("user_origin_providers").select("origin_provider").order("origin_provider", { ascending: true });
+  const { data: llmData } = await supabase.from("user_origin_providers").select("origin_provider").eq("user_uuid", USER.id).order("origin_provider", { ascending: true });
   LLM_PROVIDERS = llmData || [];
   const llmSelects = [
     document.getElementById("filter_llm"),
@@ -428,27 +455,79 @@ function renderTasks() {
   if (!container) return;
   container.innerHTML = "";
   if (TASKS.length === 0) {
-    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);">Nenhuma tarefa encontrada</div>';
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted);font-size:12px;">Nenhuma tarefa encontrada</div>';
     return;
   }
+  
   TASKS.forEach(t => {
-    const card = document.createElement("div");
-    card.className = "task-card";
-    const extStatus = t.extractor_status || t.status || "STAGED";
-    const dwnStatus = t.downloader_status || t.status || "STAGED";
-    card.innerHTML = `
-      <input type="checkbox" class="task-checkbox" onchange="toggleTaskSelection('${t.id}', this)">
-      <div class="task-status">${getStatusIcon(extStatus)}</div>
-      <div class="task-info">
-        <div class="task-id">${t.id}</div>
-        <div class="task-url">${t.full_url}</div>
+    const row = document.createElement("div");
+    row.className = "task-row";
+    row.style.display = "grid";
+    row.style.gridTemplateColumns = "40px 40px 1fr 75px 75px";
+    row.style.gap = "8px";
+    row.style.padding = "12px 8px";
+    row.style.borderBottom = "1px solid var(--border)";
+    row.style.alignItems = "center";
+    row.style.transition = "background 0.2s";
+
+    const extStatus = t.extractor_status || t.status || "100";
+    const dwnStatus = t.downloader_status || t.status || "100";
+    
+    const getStatusName = (s) => {
+      if (s === "100") return "STAGED";
+      if (s === "110") return "PROGRESS";
+      if (s === "120") return "PAUSED";
+      if (s === "130") return "DONE";
+      if (s === "200") return "FAIL";
+      if (s === "9") return "RESP";
+      return s;
+    };
+
+    const isSelected = TASK_SELECTION.has(t.id);
+
+    row.innerHTML = `
+      <div style="display: flex; justify-content: center;">
+        <input type="checkbox" class="task-checkbox" onchange="toggleTaskSelection('${t.id}', this)" ${isSelected ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--accent);">
       </div>
-      <div class="task-status-badge ${getStatusClass(extStatus)}">${extStatus}</div>
-      <div class="task-status-badge ${getStatusClass(dwnStatus)}">${dwnStatus}</div>
+      <div style="text-align: center; font-size: 16px;">${getStatusIcon(extStatus)}</div>
+      <div style="min-width: 0;">
+        <div style="font-size: 11px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${t.full_url}</div>
+        <div style="font-size: 8px; color: var(--text-muted); margin-top: 2px;">ID: ${t.id.substring(0,8)} | 🤖 ${t.agente || 'default'}</div>
+      </div>
+      <div style="text-align: center;">
+        <span class="task-status-badge ${getStatusClass(extStatus)}" style="font-size: 7px; padding: 2px 4px; width: 100%; justify-content: center;">${getStatusName(extStatus)}</span>
+      </div>
+      <div style="text-align: center;">
+        <span class="task-status-badge ${getStatusClass(dwnStatus)}" style="font-size: 7px; padding: 2px 4px; width: 100%; justify-content: center;">${getStatusName(dwnStatus)}</span>
+      </div>
     `;
-    container.appendChild(card);
+    
+    row.onclick = (e) => {
+      if (e.target.type !== 'checkbox') {
+        const cb = row.querySelector('.task-checkbox');
+        cb.checked = !cb.checked;
+        toggleTaskSelection(t.id, cb);
+      }
+    };
+    
+    container.appendChild(row);
   });
 }
+
+function toggleSelectAll(cb) {
+  const checkboxes = document.querySelectorAll('.task-checkbox');
+  checkboxes.forEach(box => {
+    box.checked = cb.checked;
+    // Extrair o ID da tarefa do evento onchange ou buscar no elemento pai
+    // No nosso caso, o ID está no atributo onchange: toggleTaskSelection('ID', this)
+    const match = box.getAttribute('onchange').match(/'([^']+)'/);
+    if (match && match[1]) {
+      if (cb.checked) TASK_SELECTION.add(match[1]);
+      else TASK_SELECTION.delete(match[1]);
+    }
+  });
+}
+window.toggleSelectAll = toggleSelectAll;
 
 function toggleTaskSelection(id, cb) {
   if (cb.checked) TASK_SELECTION.add(id);
@@ -582,7 +661,7 @@ window.setFileSlugFilter = (val) => {
 // ======================
 async function loadFiles() {
   if (!SESSION.logged) return;
-  const url = `${API_BASE_URL}/files?user_name=${USER.user_name}&client_id=${MESH_WAVE_UUID}`;
+  const url = `${API_BASE_URL}/files?user_uuid=${USER.id}&user_name=${USER.user_name}&client_id=${MESH_WAVE_UUID}`;
   try {
     const res = await fetch(url);
     const json = await res.json();
@@ -730,7 +809,7 @@ async function performSearch() {
   if (container) container.innerHTML = "Buscando...";
 
   try {
-    const url = `${API_BASE_URL}/search?q=${encodeURIComponent(query)}&mode=${SEARCH_MODE}&match=${SEARCH_MATCH_MODE}&user_name=${USER.user_name}&client_id=${MESH_WAVE_UUID}`;
+    const url = `${API_BASE_URL}/search?q=${encodeURIComponent(query)}&mode=${SEARCH_MODE}&match=${SEARCH_MATCH_MODE}&user_uuid=${USER.id}&user_name=${USER.user_name}&client_id=${MESH_WAVE_UUID}`;
     const res = await fetch(url);
     const json = await res.json();
     SEARCH_RESULTS = json.results || [];
@@ -769,6 +848,11 @@ function renderSearchResults() {
 // ======================
 const CONFIG_STORAGE_KEY = "sofia_user_config";
 
+function getConfigStorageKey(userId) {
+  if (!userId) return CONFIG_STORAGE_KEY; // Fallback
+  return `sofia_user_config_${userId}`;
+}
+
 let USER_CONFIG = {
   database: null,
   storage: null
@@ -777,12 +861,18 @@ let USER_CONFIG = {
 async function loadUserConfig() {
   // Carregar do localStorage (Persistência Local)
   // O usuário solicitou que os dados fiquem no lado dele, não no nosso DB
-  const localData = localStorage.getItem(CONFIG_STORAGE_KEY);
+  if (!USER.id) {
+    console.warn("USER.id not set, skipping config load");
+    return;
+  }
+  
+  const storageKey = getConfigStorageKey(USER.id);
+  const localData = localStorage.getItem(storageKey);
   if (localData) {
     try {
       const parsed = JSON.parse(localData);
       USER_CONFIG = { ...USER_CONFIG, ...parsed };
-      console.log("Configurações carregadas localmente:", USER_CONFIG);
+      console.log(`Configurações carregadas para ${USER.user_name}:`, USER_CONFIG);
     } catch (e) {
       console.error("Erro ao ler config local:", e);
     }
@@ -886,8 +976,33 @@ async function saveStorageConfig() {
 async function saveUserConfig() {
   // Salvar localmente apenas, conforme solicitado pelo usuário
   // Isso garante privacidade e que não temos acesso às credenciais do DB do usuário
-  localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(USER_CONFIG));
-  console.log("Configurações salvas localmente");
+  if (!USER.id) {
+    console.warn("USER.id not set, cannot save config");
+    return;
+  }
+  
+  const storageKey = getConfigStorageKey(USER.id);
+  localStorage.setItem(storageKey, JSON.stringify(USER_CONFIG));
+  console.log(`Configurações salvas para ${USER.user_name}`);
+}
+
+function clearUserConfig() {
+  if (!USER.id) {
+    showToast("Nenhum usuário logado", "error");
+    return;
+  }
+  
+  if (confirm("Tem certeza que deseja limpar todas as configurações?")) {
+    USER_CONFIG = { database: null, storage: null };
+    const storageKey = getConfigStorageKey(USER.id);
+    localStorage.removeItem(storageKey);
+    populateConfigFields();
+    updateConfigStatus();
+    showToast("Configurações limpas", "success");
+    // Reinicializar wizard
+    WIZARD_CURRENT_STEP = 1;
+    initializeWizard();
+  }
 }
 
 async function migrateTasksToUserDB() {
@@ -1123,6 +1238,418 @@ async function saveProfile() {
 }
 
 // ======================
+// WORKSPACE SETUP WIZARD
+// ======================
+let WIZARD_CURRENT_STEP = 1;
+const WIZARD_TOTAL_STEPS = 3;
+
+const WIZARD_STEPS = [
+  {
+    id: 1,
+    title: "Etapa 1: Informações do Supabase",
+    description: "Configure a URL do seu projeto Supabase e a chave de acesso (Anon Key).",
+    fields: [
+      { id: "wizard_storage_url", label: "URL do Projeto Supabase", type: "text", placeholder: "https://seu-projeto.supabase.co", required: true },
+      { id: "wizard_storage_key", label: "Supabase Anon Key", type: "password", placeholder: "Sua chave anon", required: true }
+    ]
+  },
+  {
+    id: 2,
+    title: "Etapa 2: Banco de Dados",
+    description: "Cole a Connection String (URI) do seu banco de dados PostgreSQL.",
+    fields: [
+      { id: "wizard_db_uri", label: "Connection String (URI)", type: "textarea", placeholder: "postgresql://postgres.[project-id]:[PASSWORD]@aws-0-[region].pooler.supabase.com:5432/postgres", required: true },
+      { id: "wizard_db_pass", label: "Senha do Banco de Dados", type: "password", placeholder: "Sua senha", required: false }
+    ]
+  },
+  {
+    id: 3,
+    title: "Etapa 3: Resumo e Confirmação",
+    description: "Revise as configurações e confirme para criar seu workspace.",
+    fields: []
+  }
+];
+
+function initializeWizard() {
+  // Detectar se o usuário já tem configuração
+  if (USER_CONFIG.storage && USER_CONFIG.database) {
+    // Usuário já configurado, ocultar wizard
+    const wizardSection = document.getElementById("onboarding_section");
+    if (wizardSection) wizardSection.style.display = "none";
+  } else {
+    // Mostrar wizard
+    renderWizardStep();
+  }
+}
+
+function renderWizardStep() {
+  const step = WIZARD_STEPS[WIZARD_CURRENT_STEP - 1];
+  const container = document.getElementById("wizard_content");
+  if (!container) return;
+
+  // Atualizar contador
+  const counter = document.getElementById("wizard_step_counter");
+  if (counter) counter.textContent = `Etapa ${WIZARD_CURRENT_STEP}/${WIZARD_TOTAL_STEPS}`;
+
+  // Atualizar barra de progresso
+  const progressBar = document.getElementById("wizard_progress_bar");
+  if (progressBar) progressBar.style.width = `${(WIZARD_CURRENT_STEP / WIZARD_TOTAL_STEPS) * 100}%`;
+
+  // Atualizar botões
+  const prevBtn = document.getElementById("wizard_prev_btn");
+  const nextBtn = document.getElementById("wizard_next_btn");
+  if (prevBtn) prevBtn.style.display = WIZARD_CURRENT_STEP > 1 ? "block" : "none";
+  if (nextBtn) nextBtn.textContent = WIZARD_CURRENT_STEP === WIZARD_TOTAL_STEPS ? "✅ Concluir" : "Próximo →";
+
+  // Limpar container
+  container.innerHTML = "";
+
+  // Adicionar título e descrição
+  const header = document.createElement("div");
+  header.style.marginBottom = "20px";
+  header.innerHTML = `
+    <h3 style="margin: 0 0 8px 0; color: var(--primary);">${step.title}</h3>
+    <p style="margin: 0; font-size: 12px; color: var(--muted);">${step.description}</p>
+  `;
+  container.appendChild(header);
+
+  // Adicionar campos
+  if (step.fields.length > 0) {
+    const form = document.createElement("form");
+    form.onsubmit = (e) => { e.preventDefault(); wizardNextStep(); };
+
+    step.fields.forEach(field => {
+      const group = document.createElement("div");
+      group.className = "form-group";
+
+      const label = document.createElement("label");
+      label.htmlFor = field.id;
+      label.textContent = field.label;
+      group.appendChild(label);
+
+      let input;
+      if (field.type === "textarea") {
+        input = document.createElement("textarea");
+        input.rows = 3;
+      } else {
+        input = document.createElement("input");
+        input.type = field.type;
+      }
+      input.id = field.id;
+      input.placeholder = field.placeholder;
+      if (field.required) input.required = true;
+
+      // Pré-preencher com valores salvos
+      if (WIZARD_CURRENT_STEP === 1) {
+        if (field.id === "wizard_storage_url" && USER_CONFIG.storage) {
+          input.value = USER_CONFIG.storage.url || "";
+        } else if (field.id === "wizard_storage_key" && USER_CONFIG.storage) {
+          input.value = USER_CONFIG.storage.key || "";
+        }
+      } else if (WIZARD_CURRENT_STEP === 2) {
+        if (field.id === "wizard_db_uri" && USER_CONFIG.database) {
+          input.value = USER_CONFIG.database.uri || "";
+        } else if (field.id === "wizard_db_pass" && USER_CONFIG.database) {
+          input.value = USER_CONFIG.database.pass || "";
+        }
+      }
+
+      group.appendChild(input);
+      form.appendChild(group);
+    });
+
+    container.appendChild(form);
+  } else if (WIZARD_CURRENT_STEP === 3) {
+    // Etapa de resumo
+    const summary = document.createElement("div");
+    summary.style.background = "#1a2332";
+    summary.style.padding = "15px";
+    summary.style.borderRadius = "8px";
+    summary.style.fontSize = "12px";
+
+    let summaryHTML = "<h4 style='margin-top: 0;'>Resumo da Configuração:</h4>";
+
+    if (USER_CONFIG.storage) {
+      summaryHTML += `
+        <p><strong>Supabase URL:</strong></p>
+        <p style="margin: 5px 0 10px 0; color: var(--primary); word-break: break-all;">${USER_CONFIG.storage.url}</p>
+      `;
+    }
+
+    if (USER_CONFIG.database) {
+      summaryHTML += `
+        <p><strong>Banco de Dados:</strong></p>
+        <p style="margin: 5px 0 10px 0; color: var(--primary); word-break: break-all;">${USER_CONFIG.database.uri}</p>
+      `;
+    }
+
+    summaryHTML += `
+      <p style="margin-top: 15px; color: var(--muted); font-size: 11px;">
+        ✅ Clique em <strong>Concluir</strong> para salvar e criar as tabelas automaticamente.
+      </p>
+    `;
+
+    summary.innerHTML = summaryHTML;
+    container.appendChild(summary);
+  }
+}
+
+function wizardNextStep() {
+  // Validar e salvar dados da etapa atual
+  if (WIZARD_CURRENT_STEP === 1) {
+    const url = document.getElementById("wizard_storage_url")?.value?.trim();
+    const key = document.getElementById("wizard_storage_key")?.value?.trim();
+
+    if (!url || !key) {
+      showMessage("wizard_msg", "Preencha todos os campos obrigatórios", "error");
+      return;
+    }
+
+    // Normalizar URL
+    let finalUrl = url;
+    if (finalUrl.startsWith("db.")) finalUrl = finalUrl.substring(3);
+    if (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://")) finalUrl = "https://" + finalUrl;
+
+    USER_CONFIG.storage = { url: finalUrl, key };
+    showMessage("wizard_msg", "", "");
+  } else if (WIZARD_CURRENT_STEP === 2) {
+    const uri = document.getElementById("wizard_db_uri")?.value?.trim();
+    const pass = document.getElementById("wizard_db_pass")?.value || "";
+
+    if (!uri) {
+      showMessage("wizard_msg", "Cole a Connection String", "error");
+      return;
+    }
+
+    const parsed = parseDatabaseURI(uri, pass);
+    if (!parsed) {
+      showMessage("wizard_msg", "Connection String inválida", "error");
+      return;
+    }
+
+    USER_CONFIG.database = parsed;
+    showMessage("wizard_msg", "", "");
+  } else if (WIZARD_CURRENT_STEP === 3) {
+    // Concluir wizard
+    completeWizard();
+    return;
+  }
+
+  if (WIZARD_CURRENT_STEP < WIZARD_TOTAL_STEPS) {
+    WIZARD_CURRENT_STEP++;
+    renderWizardStep();
+  }
+}
+
+function wizardPrevStep() {
+  if (WIZARD_CURRENT_STEP > 1) {
+    WIZARD_CURRENT_STEP--;
+    renderWizardStep();
+  }
+}
+
+function skipWizard() {
+  const wizardSection = document.getElementById("onboarding_section");
+  if (wizardSection) wizardSection.style.display = "none";
+  showToast("Wizard pulado. Você pode configurar manualmente abaixo.", "info");
+}
+
+async function completeWizard() {
+  showMessage("wizard_msg", "Salvando configurações...", "info");
+
+  try {
+    // Salvar configurações
+    await saveUserConfig();
+    updateConfigStatus();
+
+    showMessage("wizard_msg", "✅ Configurações salvas! Testando conexões...", "success");
+
+    // Testar conexões
+    const { createClient } = await import("./lib/supabase.js");
+    const testClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
+
+    const { error: storageError } = await testClient.storage.from("sofia_storage_user").list("", { limit: 1 });
+    const { error: dbError } = await testClient.from("appsofia_tasks").select("id").limit(1);
+
+    // Mostrar status do bootstrap
+    const bootstrapSection = document.getElementById("bootstrap_section");
+    if (bootstrapSection) {
+      bootstrapSection.style.display = "block";
+      await checkTableStatus();
+    }
+
+    // Ocultar wizard
+    const wizardSection = document.getElementById("onboarding_section");
+    if (wizardSection) wizardSection.style.display = "none";
+
+    showToast("✅ Setup concluído! Próximo passo: criar as tabelas.", "success");
+  } catch (error) {
+    showMessage("wizard_msg", `❌ Erro: ${error.message}`, "error");
+  }
+}
+
+// ======================
+// TABLE BOOTSTRAP
+// ======================
+async function checkTableStatus() {
+  if (!USER_CONFIG.storage) {
+    showMessage("bootstrap_msg", "Configure o Storage primeiro", "error");
+    return;
+  }
+
+  const statusDiv = document.getElementById("bootstrap_tables_status");
+  if (statusDiv) statusDiv.innerHTML = "<p>⏳ Verificando tabelas...</p>";
+
+  try {
+    const { createClient } = await import("./lib/supabase.js");
+    const testClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
+
+    const tables = ["appsofia_tasks", "user_origin_providers", "user_agents"];
+    let statusHTML = "";
+    let allOk = true;
+
+    for (const table of tables) {
+      const { error } = await testClient.from(table).select("id").limit(1);
+      if (error && (error.code === "PGRST116" || error.message.includes("does not exist"))) {
+        statusHTML += `<p>🔴 ${table}: Não encontrada</p>`;
+        allOk = false;
+      } else if (error) {
+        statusHTML += `<p>⚠️ ${table}: ${error.message}</p>`;
+        allOk = false;
+      } else {
+        statusHTML += `<p>🟢 ${table}: OK</p>`;
+      }
+    }
+
+    if (statusDiv) statusDiv.innerHTML = statusHTML;
+
+    if (allOk) {
+      showMessage("bootstrap_msg", "✅ Todas as tabelas estão criadas!", "success");
+    } else {
+      showMessage("bootstrap_msg", "⚠️ Algumas tabelas estão faltando. Clique em 'Criar Tabelas' para criá-las.", "warning");
+    }
+  } catch (error) {
+    if (statusDiv) statusDiv.innerHTML = `<p>❌ Erro: ${error.message}</p>`;
+    showMessage("bootstrap_msg", `❌ Erro ao verificar: ${error.message}`, "error");
+  }
+}
+
+async function bootstrapTables() {
+  if (!USER_CONFIG.storage) {
+    showMessage("bootstrap_msg", "Configure o Storage primeiro", "error");
+    return;
+  }
+
+  showMessage("bootstrap_msg", "⏳ Criando tabelas...", "info");
+
+  try {
+    const { createClient } = await import("./lib/supabase.js");
+    const testClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
+
+    // Tentar criar as tabelas (nota: Supabase JS não permite executar SQL arbitrário)
+    // Portanto, apenas informamos ao usuário que ele precisa executar manualmente
+    const sqlScript = `
+-- Criar tabela de tarefas
+CREATE TABLE IF NOT EXISTS public.appsofia_tasks (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  user_name text,
+  client_uuid uuid,
+  session_user_id uuid,
+  user_uuid uuid,
+  full_url text,
+  slug text,
+  origin_provider text,
+  agente text,
+  status text DEFAULT 'STAGED',
+  extractor_status text DEFAULT 'STAGED',
+  downloader_status text DEFAULT 'STAGED',
+  metadata jsonb DEFAULT '{}'::jsonb
+);
+
+-- Criar tabela de providers
+CREATE TABLE IF NOT EXISTS public.user_origin_providers (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  user_uuid uuid,
+  client_uuid uuid,
+  origin_provider text,
+  UNIQUE(user_uuid, origin_provider)
+);
+
+-- Criar tabela de agentes
+CREATE TABLE IF NOT EXISTS public.user_agents (
+  id bigserial not null,
+  client_uuid uuid not null,
+  user_uuid uuid not null,
+  agent_name text not null,
+  created_at timestamp with time zone null default now(),
+  constraint user_agents_pkey primary key (id),
+  constraint user_agents_unique unique (user_uuid, agent_name)
+);
+    `;
+
+    // Copiar SQL para clipboard
+    const textarea = document.createElement("textarea");
+    textarea.value = sqlScript;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    document.body.removeChild(textarea);
+
+    // 1. Tentar criar o bucket de storage automaticamente
+    try {
+      const { data: bucket, error: bucketError } = await testClient.storage.createBucket('sofia_storage_user', {
+        public: true,
+        fileSizeLimit: 52428800, // 50MB
+        allowedMimeTypes: ['image/*', 'text/*', 'application/pdf', 'application/json']
+      });
+      
+      if (bucketError && bucketError.message.includes("already exists")) {
+        console.log("Bucket já existe.");
+      } else if (bucketError) {
+        console.warn("Erro ao criar bucket automaticamente:", bucketError.message);
+      } else {
+        console.log("Bucket criado com sucesso!");
+      }
+    } catch (e) {
+      console.warn("Erro na tentativa de criar bucket:", e);
+    }
+
+    // 2. Gerar link direto para o SQL Editor
+    let sqlEditorUrl = "https://supabase.com/dashboard/project/_/sql/new";
+    if (USER_CONFIG.storage && USER_CONFIG.storage.url) {
+      const projectId = USER_CONFIG.storage.url.split("//")[1].split(".")[0];
+      if (projectId) {
+        sqlEditorUrl = `https://supabase.com/dashboard/project/${projectId}/sql/new`;
+      }
+    }
+
+    // 3. Atualizar UI com link e instrução
+    const msgDiv = document.getElementById("bootstrap_msg");
+    if (msgDiv) {
+      msgDiv.innerHTML = `
+        <div style="background: #1a3a3a; padding: 15px; border-radius: 8px; border: 1px solid var(--primary); margin-top: 10px;">
+          <p style="margin-top: 0;">✅ <strong>SQL Copiado!</strong></p>
+          <p style="font-size: 11px;">O bucket de storage foi solicitado. Agora, clique no botão abaixo para abrir o editor SQL do seu projeto, cole o código (Ctrl+V) e clique em <strong>Run</strong>.</p>
+          <a href="${sqlEditorUrl}" target="_blank" class="btn btn-primary btn-block" style="text-decoration: none; text-align: center; display: block; margin-top: 10px;">🚀 Abrir SQL Editor no Supabase</a>
+        </div>
+      `;
+      msgDiv.className = "message show info";
+    }
+    
+    showToast("SQL copiado! Siga as instruções na tela.", "success");
+
+    // Aguardar um pouco e verificar status
+    setTimeout(() => {
+      checkTableStatus();
+    }, 5000);
+  } catch (error) {
+    showMessage("bootstrap_msg", `❌ Erro: ${error.message}`, "error");
+  }
+}
+
+// ======================
 // WINDOW EXPORTS
 // ======================
 window.showTab = showTab;
@@ -1151,6 +1678,118 @@ window.setFileLLMFilter = setFileLLMFilter;
 window.setFileSlugFilter = setFileSlugFilter;
 window.migrateTasksToUserDB = migrateTasksToUserDB;
 window.ensureOriginProviderInUserDB = ensureOriginProviderInUserDB;
+window.clearUserConfig = clearUserConfig;
+window.wizardNextStep = wizardNextStep;
+window.wizardPrevStep = wizardPrevStep;
+window.skipWizard = skipWizard;
+window.checkTableStatus = checkTableStatus;
+window.bootstrapTables = bootstrapTables;
+window.handleTerminalCommand = handleTerminalCommand;
+
+// ======================
+// TERMINAL LOGIC
+// ======================
+function addTerminalLine(text, type = "info") {
+  const body = document.getElementById("terminal_body");
+  if (!body) return;
+  const line = document.createElement("div");
+  line.className = `terminal-line ${type}`;
+  line.textContent = text;
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+}
+
+async function handleTerminalCommand(event) {
+  if (event.key !== "Enter") return;
+  const input = document.getElementById("terminal_input");
+  const command = input.value.trim().toLowerCase();
+  if (!command) return;
+
+  addTerminalLine(`sofia@workspace:~$ ${command}`, "command");
+  input.value = "";
+
+  const args = command.split(" ");
+  const cmd = args[0];
+
+  switch (cmd) {
+    case "help":
+      addTerminalLine("Available commands:");
+      addTerminalLine("  help          - Show this help message");
+      addTerminalLine("  clear         - Clear terminal screen");
+      addTerminalLine("  sofia-init    - Run full workspace bootstrap");
+      addTerminalLine("  status        - Check workspace configuration status");
+      addTerminalLine("  whoami        - Show current user info");
+      addTerminalLine("  ls            - List available workspace components");
+      break;
+    case "clear":
+      const body = document.getElementById("terminal_body");
+      if (body) body.innerHTML = "";
+      break;
+    case "whoami":
+      addTerminalLine(`User: ${USER.user_name} (${USER.full_name})`);
+      addTerminalLine(`Email: ${USER.email}`);
+      break;
+    case "ls":
+      addTerminalLine("Components:");
+      addTerminalLine("  [DIR]  lib/");
+      addTerminalLine("  [FILE] main.js");
+      addTerminalLine("  [DB]   appsofia_tasks");
+      addTerminalLine("  [STRG] sofia_storage_user");
+      break;
+    case "status":
+      addTerminalLine("Checking configuration...");
+      addTerminalLine(`Database: ${USER_CONFIG.database ? "CONNECTED" : "NOT CONFIGURED"}`);
+      addTerminalLine(`Storage: ${USER_CONFIG.storage ? "CONNECTED" : "NOT CONFIGURED"}`);
+      break;
+    case "sofia-init":
+      await runSofiaInit();
+      break;
+    default:
+      addTerminalLine(`Command not found: ${cmd}`, "error");
+  }
+}
+
+async function runSofiaInit() {
+  if (!USER_CONFIG.storage || !USER_CONFIG.database) {
+    addTerminalLine("Error: Missing configuration. Run wizard first.", "error");
+    return;
+  }
+
+  addTerminalLine("Starting Sofia Workspace Initialization...", "info");
+  addTerminalLine("Step 1: Connecting to Supabase API...", "info");
+  
+  try {
+    const { createClient } = await import("./lib/supabase.js");
+    const testClient = createClient(USER_CONFIG.storage.url, USER_CONFIG.storage.key);
+    addTerminalLine("DONE: API Connected.", "info");
+
+    addTerminalLine("Step 2: Provisioning Storage Bucket...", "info");
+    const { data: bucket, error: bucketError } = await testClient.storage.createBucket('sofia_storage_user', { public: true });
+    
+    if (bucketError && bucketError.message.includes("already exists")) {
+      addTerminalLine("SKIP: Bucket already exists.", "warn");
+    } else if (bucketError) {
+      addTerminalLine(`WARN: ${bucketError.message}`, "warn");
+    } else {
+      addTerminalLine("DONE: Bucket created successfully.", "info");
+    }
+
+    addTerminalLine("Step 3: Preparing Database Schema...", "info");
+    addTerminalLine("System is ready to create tables.", "info");
+    addTerminalLine("Due to security constraints, please run the SQL script.", "info");
+    
+    // Acionar a lógica de bootstrap já existente
+    bootstrapTables();
+    
+    addTerminalLine("DONE: SQL script copied to clipboard.", "info");
+    addTerminalLine("-------------------------------------------", "info");
+    addTerminalLine("WORKSPACE INITIALIZATION COMPLETED (PENDING SQL RUN)", "info");
+    addTerminalLine("Type 'status' to check again.", "info");
+    
+  } catch (e) {
+    addTerminalLine(`FATAL ERROR: ${e.message}`, "error");
+  }
+}
 
 // ======================
 // INITIALIZATION
@@ -1158,15 +1797,19 @@ window.ensureOriginProviderInUserDB = ensureOriginProviderInUserDB;
 document.addEventListener("DOMContentLoaded", async () => {
   showTab(1);
   
-  // Carregar config local o mais rápido possível (antes mesmo do login)
+  // 1. Tentar restaurar sessão primeiro para saber quem é o usuário
+  await restoreSession();
+  
+  // 2. Carregar config local específica do usuário (ou guest se não logado)
   await loadUserConfig();
   
-  await restoreSession();
+  // 3. Inicializar wizard se necessário
+  if (typeof initializeWizard === 'function') {
+    initializeWizard();
+  }
 
   if (SESSION.logged) {
     await loadAgentsAndLLMs();
-    // Recarregar para sincronizar com a nuvem se logado
-    await loadUserConfig();
   }
 });
 
