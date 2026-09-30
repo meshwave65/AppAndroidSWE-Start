@@ -200,7 +200,7 @@ function openPreviewModal(file) {
     fetch(fileUrl)
       .then(res => res.text())
       .then(text => {
-        const preview = text.length > 5000 ? text.substring(0, 5000) + "\n\n[... file truncated ...]": text;
+        const preview = text.length > 5000 ? text.substring(0, 5000) + "\n\n[... file truncated ...]" : text;
         body.innerHTML = `<div class="preview-text">${preview}</div>`;
       })
       .catch(() => {
@@ -393,13 +393,23 @@ async function loadAgentsAndLLMs() {
     if (!select) return;
     const current = select.value;
     select.innerHTML = "";
+
+    if (select.id === "insert_agent") {
+      const opt = document.createElement("option");
+      opt.value = "default";
+      opt.innerText = "Default";
+      select.appendChild(opt);
+    }
+
     if (select.id.includes("filter")) {
       const opt = document.createElement("option");
       opt.value = "ALL";
       opt.innerText = "Todos os Agentes";
       select.appendChild(opt);
     }
+
     AGENTS.forEach(agent => {
+      if (select.id === "insert_agent" && agent.agent_name === "default") return;
       const opt = document.createElement("option");
       opt.value = agent.agent_name;
       opt.innerText = agent.agent_name;
@@ -1120,21 +1130,17 @@ async function testDatabaseConnection() {
 
     const { createClient } = await import("./lib/supabase.js");
     
-    // Importar chaves padrão se necessário
-    let finalApiKey = apiKey;
-    if (!finalApiKey) {
-      // Se não tiver chave de storage, tenta inferir se é o projeto default da MeshWave
-      if (apiUrl.includes("ufylccbdjfzydbwhpmpp")) {
-        finalApiKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmeWxjY2JkamZ6eWRid2hwbXBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MDE1NjgsImV4cCI6MjA3NzI3NzU2OH0.SqbNgLH2_0gRwrQokFQpZgnIjzH2vVZtpoqmqj8tCgk";
-      }
+    // Usar a chave configurada no ambiente Vite como fallback.
+    if (!apiKey) {
+      apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
     }
 
-    if (!finalApiKey) {
+    if (!apiKey) {
       showMessage("db_msg", "⚠️ Anon Key not found. Please configure Storage first.", "warning");
       return;
     }
     
-    const testClient = createClient(apiUrl, finalApiKey);
+    const testClient = createClient(apiUrl, apiKey);
     
     // Tentar acessar a tabela 'appsofia_tasks' que é o que o sistema usa
     const { data, error } = await testClient
@@ -1161,9 +1167,9 @@ async function testDatabaseConnection() {
 
 async function testStorageConnection() {
   let url = document.getElementById("storage_url").value.trim();
-  const key = document.getElementById("storage_key").value.trim();
+  let key = document.getElementById("storage_key").value.trim();
 
-  if (!url || !key) {
+  if (!url) {
     showMessage("storage_msg", "Please fill in all storage fields first", "error");
     return;
   }
@@ -1183,17 +1189,16 @@ async function testStorageConnection() {
   try {
     const { createClient } = await import("./lib/supabase.js");
     
-    let finalKey = key;
-    if (!finalKey && url.includes("ufylccbdjfzydbwhpmpp")) {
-      finalKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVmeWxjY2JkamZ6eWRid2hwbXBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3MDE1NjgsImV4cCI6MjA3NzI3NzU2OH0.SqbNgLH2_0gRwrQokFQpZgnIjzH2vVZtpoqmqj8tCgk";
+    if (!key) {
+      key = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
     }
 
-    if (!finalKey) {
+    if (!key) {
       showMessage("storage_msg", "Please provide the Supabase Anon Key", "error");
       return;
     }
 
-    const testClient = createClient(url, finalKey);
+    const testClient = createClient(url, key);
     const { data, error } = await testClient.storage.from("sofia_storage_user").list("", { limit: 1 });
     
     if (error) {
@@ -1824,3 +1829,4 @@ function copySQL() {
   }
 }
 window.copySQL = copySQL;
+
